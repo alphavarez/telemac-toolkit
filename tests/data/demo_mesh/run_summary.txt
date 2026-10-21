@@ -1,0 +1,8 @@
+TELEMAC-2D v9.1.1 run of the demo valley rebuilt in QGIS (scripts/make_mesh_demo.py)
+Mesh: 5474 nodes, 10743 elements, angles 26.9 to 116.0 deg, edges 5.3 to 52.3 m
+Bottom from a 2 m DEM GeoTIFF (bilinear), boundary conditions from two lines (Q upstream, H downstream)
+     RELATIVE ERROR IN VOLUME AT T =       0.1800E+05 S :    0.2480531E-14
+     TOTAL VOLUME LOST             :    0.1236913E-08 M3
+ CORRECT END OF RUN
+     FLUX BOUNDARY    1:    -40.43326     M3/S  ( >0 : ENTERING  <0 : EXITING )
+     FLUX BOUNDARY    2:     30.04941     M3/S  ( >0 : ENTERING  <0 : EXITING )

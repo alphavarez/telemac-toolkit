@@ -1,0 +1,11 @@
+TELEMAC-2D v9.1.1 run of a laboratory flume built in local coordinates (scripts/make_flume_demo.py)
+Flume 20 m x 1 m from (0, 0), bed slope 0.001, structured 5 cm grid: 8 421 nodes (401 x 21)
+Friction in the geometry file: BOTTOM FRICTION = 0.025 (Manning); steering file FRICTION COEFFICIENT = 0.05
+ FONSTR : FRICTION COEFFICIENTS READ IN THE
+          GEOMETRY FILE
+Steady state after 1200 s:
+     FLUX BOUNDARY    1:   -0.4999995E-01 M3/S  ( >0 : ENTERING  <0 : EXITING )
+     FLUX BOUNDARY    2:    0.5000000E-01 M3/S  ( >0 : ENTERING  <0 : EXITING )
+     TOTAL VOLUME LOST             :   -0.1776357E-14 M3
+ CORRECT END OF RUN
+Mean depth between x = 6 and 14 m: 0.1448 m; normal depth for n = 0.025: 0.1439 m (for n = 0.05 it would be 0.2182 m)

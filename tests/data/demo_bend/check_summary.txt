@@ -1,0 +1,7 @@
+Discharge, inlet straight x=1.5   0.04999 m3/s  (inflow 0.050)
+Discharge, bend 45 deg            0.04999 m3/s  (inflow 0.050)
+Discharge, bend 90 deg            0.05001 m3/s  (inflow 0.050)
+Discharge, bend 135 deg           0.04999 m3/s  (inflow 0.050)
+Discharge, outlet straight x=1.5  0.05000 m3/s  (inflow 0.050)
+Apex: depth 0.1455 m, mean velocity 0.3437 m/s; surface outer - inner = 6.27 mm (Rozovskii U^2 W / (g R) = 6.02 mm)
+Vorticity at the last frame: -1.858 to 1.876 1/s (1st to 99th percentile; the extremes, -11.0 and 11.0, are at the inlet corners)

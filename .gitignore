@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+dist/
+.pytest_cache/
+*_2d_average.slf
+*_2d_bottom.slf
+*_2d_surface.slf
+*_2d_plane*.slf

@@ -1,0 +1,30 @@
+TELEMAC-2D v9.1.1 run of a 180-degree laboratory bend built with the channel template (scripts/make_bend_demo.py)
+Flume 1 m wide: 3 m inlet, bend R = 2 m on the axis over 180 deg, 3 m outlet; bed slope 0.001 along the axis (formula of s)
+Structured 5 cm cells normal to the axis: 5 187 nodes; Manning n = 0.025 in the geometry file
+ FONSTR : FRICTION COEFFICIENTS READ IN THE
+          GEOMETRY FILE
+ THERE IS     2 LIQUID BOUNDARIES:
+
+ BOUNDARY    1 :
+  BEGINS AT BOUNDARY POINT:      268 , WITH GLOBAL NUMBER:      5186
+  AND COORDINATES:    0.5002942E-15       4.450000
+  ENDS AT BOUNDARY POINT:      286 , WITH GLOBAL NUMBER:      5168
+  AND COORDINATES:    0.3878842E-15       3.550000
+
+ BOUNDARY    2 :
+  BEGINS AT BOUNDARY POINT:        2 , WITH GLOBAL NUMBER:         2
+  AND COORDINATES:     0.000000          0.4500000
+Steady state at 600 s:
+     FLUX BOUNDARY    1:   -0.4999982E-01 M3/S  ( >0 : ENTERING  <0 : EXITING )
+     FLUX BOUNDARY    2:    0.5000000E-01 M3/S  ( >0 : ENTERING  <0 : EXITING )
+     TOTAL VOLUME LOST             :   -0.1620926E-13 M3
+ CORRECT END OF RUN
+
+Checks with the plugin (scripts/check_bend_demo.py):
+Discharge, inlet straight x=1.5   0.04999 m3/s  (inflow 0.050)
+Discharge, bend 45 deg            0.04999 m3/s  (inflow 0.050)
+Discharge, bend 90 deg            0.05001 m3/s  (inflow 0.050)
+Discharge, bend 135 deg           0.04999 m3/s  (inflow 0.050)
+Discharge, outlet straight x=1.5  0.05000 m3/s  (inflow 0.050)
+Apex: depth 0.1455 m, mean velocity 0.3437 m/s; surface outer - inner = 6.27 mm (Rozovskii U^2 W / (g R) = 6.02 mm)
+Vorticity at the last frame: -1.858 to 1.876 1/s (1st to 99th percentile; the extremes, -11.0 and 11.0, are at the inlet corners)
