@@ -16,4 +16,4 @@ No dependency beyond NumPy, which ships with QGIS. QGIS 3.44 LTR and QGIS 4.x, W
 User guide: https://github.com/alphavarez/telemac-toolkit/blob/main/docs/guide/README.md
 Source code and issues: https://github.com/alphavarez/telemac-toolkit
 
-Licence: GPL-3.0-or-later (see LICENSE). Author: Kevin Douglas Álvarez Segales.
+Licence: GPL-3.0-or-later (see LICENSE). Author: Kevin Douglas Alvarez Segales.
