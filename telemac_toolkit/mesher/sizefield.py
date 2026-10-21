@@ -10,7 +10,7 @@ sources, capped by the default edge length.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Sequence
+from typing import List
 
 import numpy as np
 

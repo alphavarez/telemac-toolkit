@@ -9,7 +9,8 @@ from qgis.core import (
     QgsColorRampShader,
     QgsGradientColorRamp,
     QgsGradientStop,
-    QgsMeshDatasetIndex,
+    QgsInterpolatedLineColor,
+    QgsMeshRendererVectorSettings,
     QgsStyle,
 )
 from qgis.PyQt.QtGui import QColor
@@ -269,10 +270,7 @@ def style_vector_group(rs, g: int, style: Optional[ArrowStyle] = None):
     settings = layer.rendererSettings()
     vs = settings.vectorSettings(g)
     vmax = group_max_magnitude(layer, g)
-    try:
-        vs.setSymbology(vs.Symbology.Arrows)
-    except Exception:
-        pass
+    vs.setSymbology(QgsMeshRendererVectorSettings.Symbology.Arrows)
     vs.setOnUserDefinedGrid(style.placement == "grid")
     vs.setUserGridCellWidth(int(style.spacing))
     vs.setUserGridCellHeight(int(style.spacing))
@@ -280,20 +278,15 @@ def style_vector_group(rs, g: int, style: Optional[ArrowStyle] = None):
     vs.setFilterMax(-1.0)
     vs.setLineWidth(float(style.width))
     vs.setColor(QColor(style.color))
-    try:
-        from qgis.core import QgsInterpolatedLineColor
-
-        if style.by_value and vmax > 0:
-            ramp = ramp_for(STYLE_VELOCITY)
-            shader = QgsColorRampShader(0.0, vmax)
-            shader.setSourceColorRamp(ramp.clone())
-            shader.setColorRampItemList(_items_from_ramp(ramp, 0.0, vmax))
-            vs.setColorRampShader(shader)
-            vs.setColoringMethod(QgsInterpolatedLineColor.ColoringMethod.ColorRamp)
-        else:
-            vs.setColoringMethod(QgsInterpolatedLineColor.ColoringMethod.SingleColor)
-    except Exception:
-        pass
+    if style.by_value and vmax > 0:
+        ramp = ramp_for(STYLE_VELOCITY)
+        shader = QgsColorRampShader(0.0, vmax)
+        shader.setSourceColorRamp(ramp.clone())
+        shader.setColorRampItemList(_items_from_ramp(ramp, 0.0, vmax))
+        vs.setColorRampShader(shader)
+        vs.setColoringMethod(QgsInterpolatedLineColor.ColoringMethod.ColorRamp)
+    else:
+        vs.setColoringMethod(QgsInterpolatedLineColor.ColoringMethod.SingleColor)
     arrows = vs.arrowSettings()
     method = QgsMeshRendererVectorArrowSettings.ArrowScalingMethod
     if style.length == "fixed":

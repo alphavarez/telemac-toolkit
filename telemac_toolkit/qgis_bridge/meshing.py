@@ -62,7 +62,7 @@ from ..mesher.interp import FormulaSource, PointSource, bilinear, fill_nearest, 
 from ..mesher.meshdata import Frame, Mesh, pairs_to_quads
 from ..mesher.regular import regular_grid_mesh
 from ..mesher.sizefield import LineDensity, PointDensity, PolygonDensity, SizeField
-from ..mesher.writers import FORMATS, boundary_strings, write_frame_note, write_mesh
+from ..mesher.writers import FORMATS, write_frame_note, write_mesh
 from ..telemac_io import write_cli, write_selafin
 from ..telemac_io.cli import BOUNDARY_TYPES
 from ..telemac_io.mesh import boundary_loops
@@ -344,11 +344,8 @@ def _value(f, name, default=None):
         v = f.attribute(idx)
         if v is None:
             continue
-        try:
-            if hasattr(v, "isNull") and v.isNull():
-                continue
-        except Exception:
-            pass
+        if callable(getattr(v, "isNull", None)) and v.isNull():  # a NULL QVariant
+            continue
         if isinstance(v, str) and not v.strip():
             continue
         return v
@@ -390,7 +387,7 @@ def line_parts(g: QgsGeometry) -> List[np.ndarray]:
     t = QgsWkbTypes.geometryType(g.wkbType())
     if t == Qgis.GeometryType.Line:
         lines = g.asMultiPolyline() if g.isMultipart() else [g.asPolyline()]
-        return [_xy(l) for l in lines if len(l) >= 2]
+        return [_xy(line) for line in lines if len(line) >= 2]
     if t == Qgis.GeometryType.Polygon:  # polygons used as lines: their rings
         return [np.vstack([r, r[:1]]) for part in polygon_parts(g) for r in part]
     if g.isMultipart() or QgsWkbTypes.flatType(g.wkbType()) == Qgis.WkbType.GeometryCollection:
@@ -586,7 +583,7 @@ def build_mesh_input(layers: Dict[str, object], crs: Optional[QgsCoordinateRefer
         polys, nodes, sa, sb, emax = [], [], [], [], 0.0
         for sm in subs:
             loops = boundary_loops(sm.ikle, sm.x, sm.y)
-            rings = [np.stack([sm.x[l], sm.y[l]], axis=1) for l in loops]
+            rings = [np.stack([sm.x[lp], sm.y[lp]], axis=1) for lp in loops]
             polys.append(_poly_geom(rings))
             for r in rings:
                 nodes.append(r)
@@ -1084,7 +1081,7 @@ def read_mesh_file(path: str):
     ext = os.path.splitext(path)[1].lower()
     if ext in (".slf", ".res", ".geo", ".srf", ".sel", ".ser"):
         from ..telemac_io import SelafinFile
-        from .results import sidecar_crs
+        from .crs import sidecar_crs
 
         with SelafinFile(path) as s:
             h = s.header
@@ -1129,7 +1126,7 @@ def read_mesh_file(path: str):
              z=np.where(np.isfinite(z), z, 0.0))
     crs = lyr.crs() if lyr.crs().isValid() else None
     if crs is None:
-        from .results import sidecar_crs
+        from .crs import sidecar_crs
 
         crs = sidecar_crs(path)  # the .prj written next to the mesh
     if crs is not None:
@@ -1287,8 +1284,6 @@ def export_mesh(path: str, mesh: Mesh, crs, opts: ExportOptions, lines: Optional
                 values: Optional[Dict[str, float]] = None, tolerance: Optional[float] = None,
                 drawing: Optional[Dict[str, object]] = None, default_size: float = 0.0, project=None):
     """Write ``mesh`` in ``opts.fmt``; returns (files, report lines, steering-file lines)."""
-    from ..mesher.writers import FORMATS, write_mesh
-
     if opts.fmt not in FORMATS:
         raise ValueError("unknown format %r" % opts.fmt)
     fmt = FORMATS[opts.fmt]
@@ -1313,8 +1308,8 @@ def export_mesh(path: str, mesh: Mesh, crs, opts: ExportOptions, lines: Optional
         report.append("Local coordinates: %s" % frame.describe())
     table = None
     if lines and opts.fmt != "hecras":
-        lt = lines if frame.is_identity else [BoundaryLine(np.stack(frame.forward(l.coords[:, 0], l.coords[:, 1]), axis=1), l.codes, l.name)
-                                              for l in lines]
+        lt = lines if frame.is_identity else [BoundaryLine(np.stack(frame.forward(bl.coords[:, 0], bl.coords[:, 1]), axis=1),
+                                                          bl.codes, bl.name) for bl in lines]
         table, rep = build_boundary_table(m.x, m.y, m.all_triangles(), lt, tolerance)
         report += rep
         liq, cas = liquid_values(table, values)

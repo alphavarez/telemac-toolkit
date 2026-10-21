@@ -15,7 +15,6 @@ geometry layers) live in ``qgis_bridge.meshing``.
 
 from __future__ import annotations
 
-import math
 import os
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
@@ -81,7 +80,10 @@ def boundary_strings(mesh: Mesh, table: BoundaryTable, values: Optional[Dict[str
         idx = [pos[int(n)] for n in loop if int(n) in pos]
         if not idx:
             continue
-        key = lambda i: (tuple(int(c) for c in codes[i]), table.comments[i] if i < len(table.comments) else "")
+
+        def key(i):
+            return tuple(int(c) for c in codes[i]), table.comments[i] if i < len(table.comments) else ""
+
         # start the walk at a change of segment so no run is cut in two at the loop start
         start = 0
         for j in range(len(idx)):

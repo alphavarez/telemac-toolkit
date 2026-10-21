@@ -8,7 +8,7 @@ the same result. Settings are kept in the project GeoPackage.
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from qgis.core import (
     Qgis,
@@ -20,7 +20,6 @@ from qgis.core import (
     QgsProcessingFeedback,
     QgsProject,
     QgsRasterLayer,
-    QgsRectangle,
     QgsVectorLayer,
 )
 from qgis.gui import QgsDockWidget, QgsFieldComboBox, QgsFileWidget, QgsMapLayerComboBox, QgsVertexMarker

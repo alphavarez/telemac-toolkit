@@ -30,7 +30,6 @@ from qgis.PyQt.QtWidgets import (
 
 from ..qgis_bridge import styles
 from ..qgis_bridge.results import format_duration
-from ..telemac_io.variables import canonical
 from .plot_widget import PALETTE, PlotWidget, Series
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icons")
@@ -442,7 +441,7 @@ class ResultsDock(QgsDockWidget):
             parts.append(self.tr("3D file shown as: %s") % rs.derived_from_3d)
         if rs.has_calendar_date:
             parts.append(self.tr("start %s") % h.start_datetime.strftime("%Y-%m-%d %H:%M"))
-        from ..qgis_bridge.results import crs_label
+        from ..qgis_bridge.crs import crs_label
 
         parts.append(crs_label(rs.layer.crs()))
         html = " · ".join(parts)

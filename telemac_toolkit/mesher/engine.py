@@ -757,7 +757,7 @@ def generate(inp: MeshInput, triangulate: Triangulator, progress: Progress = Non
     if inp.hard_points is not None:
         for p in np.asarray(inp.hard_points, float).reshape(-1, 2):
             add_node(p, HARDPOINT)
-    for ln in sorted(lines, key=lambda l: _PRIORITY[l.kind]):
+    for ln in sorted(lines, key=lambda line: _PRIORITY[line.kind]):
         ids = [add_node(p, ln.kind) for p in ln.coords]
         pairs = list(zip(ids[:-1], ids[1:]))
         if ln.closed:
@@ -908,7 +908,7 @@ def generate(inp: MeshInput, triangulate: Triangulator, progress: Progress = Non
     quads_all: List[np.ndarray] = []
     if inp.submeshes:
         key = {(round(float(px) / snap), round(float(py) / snap)): i for i, (px, py) in enumerate(zip(x, y))}
-        add_x, add_y, add_t, add_d, tris = [], [], [], [], []
+        add_x, add_y, add_t, tris = [], [], [], []
         n = len(x)
         for sm in inp.submeshes:
             loc = np.empty(len(sm.x), dtype=np.int64)

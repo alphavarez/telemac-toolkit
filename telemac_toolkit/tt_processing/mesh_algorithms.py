@@ -37,8 +37,9 @@ from ..mesher.regular import regular_grid_mesh
 from ..mesher.writers import FORMATS
 from ..mesher.interp import channel_formula, formula_names
 from ..qgis_bridge import meshing as M
+from ..log import log_exception
 from ..qgis_bridge.crs import show_layer, sidecar_crs
-from ..telemac_io import SelafinFile, mesh_statistics
+from ..telemac_io import SelafinError, mesh_statistics
 from ..telemac_io.variables import canonical
 from .algorithms import SLF_FILTER, _Base, _field
 
@@ -105,8 +106,8 @@ class _MeshBase(_Base):
 
                 if iface is not None and project is QgsProject.instance():
                     show_layer(lyr, iface.mapCanvas(), project, first=first)
-            except Exception:
-                pass
+            except (ImportError, RuntimeError) as exc:  # no QGIS window (scripts, tests)
+                log_exception("Zoom to %s" % name, exc)
         self._to_load = []
         return {}
 
@@ -124,8 +125,8 @@ class _MeshBase(_Base):
             choice = suggest_crs(path, file_extent(path), context.project() or QgsProject.instance())
             if choice.crs is not None and choice.crs.isValid():
                 return choice.crs
-        except Exception:
-            pass
+        except (OSError, ValueError, SelafinError) as exc:  # not a SELAFIN file we can read: fall back to the project CRS
+            log_exception("CRS of %s" % os.path.basename(path), exc)
         return context.project().crs() if context.project() else QgsCoordinateReferenceSystem()
 
     def _progress(self, feedback, lo=0.0, hi=100.0):

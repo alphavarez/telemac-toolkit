@@ -5,7 +5,6 @@ from __future__ import annotations
 import html
 import os
 
-import numpy as np
 from qgis.core import (
     Qgis,
     QgsCoordinateTransform,
@@ -17,7 +16,6 @@ from qgis.core import (
     QgsPointXY,
     QgsProcessingAlgorithm,
     QgsProcessingException,
-    QgsProcessingParameterBoolean,
     QgsProcessingParameterCrs,
     QgsProcessingParameterEnum,
     QgsProcessingParameterFeatureSink,

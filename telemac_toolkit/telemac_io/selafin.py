@@ -26,6 +26,7 @@ This module has no QGIS dependency.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import math
 import os
@@ -371,10 +372,9 @@ class SelafinFile:
         if self._mm is not None:
             mm = self._mm
             self._mm = None
-            try:
-                mm._mmap.close()  # release the file handle (Windows locks it)
-            except Exception:  # pragma: no cover - depends on numpy internals
-                pass
+            # release the file handle (Windows locks it); numpy may already have closed it
+            with contextlib.suppress(AttributeError, ValueError, BufferError, OSError):
+                mm._mmap.close()
 
     def close(self):
         self._close_map()

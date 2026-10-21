@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from qgis.core import (
     Qgis,
     QgsCoordinateTransform,
@@ -157,7 +158,5 @@ class ProfileTool(_ResultTool):
 
     def remove(self):
         self.reset()
-        try:
+        with contextlib.suppress(RuntimeError):  # the canvas may already be gone
             self.canvas().scene().removeItem(self.band)
-        except Exception:
-            pass

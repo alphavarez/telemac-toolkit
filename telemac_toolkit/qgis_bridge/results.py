@@ -23,7 +23,8 @@ from ..telemac_io import SelafinFile, TriangleLocator, extract_2d, sample_polyli
 from ..telemac_io.selafin import precision_warning
 from ..telemac_io.variables import canonical, display_name, lookup, vector_pairs
 from . import styles
-from .crs import Extent, crs_label, sidecar_crs, suggest_crs  # noqa: F401 (re-exported)
+from ..log import log_exception
+from .crs import Extent, suggest_crs
 
 def _qdatetime(d):
     from qgis.PyQt.QtCore import QDate, QTime
@@ -279,8 +280,8 @@ class ResultSet(QObject):
             self.layer.dataProvider().reloadData()
             self.layer.reload()
             self.layer.triggerRepaint()
-        except Exception:
-            pass
+        except RuntimeError as exc:  # the layer was removed meanwhile
+            log_exception("Refresh of the mesh layer", exc)
         self.reloaded.emit()
         return n
 
@@ -368,8 +369,8 @@ def load_result(
     if not ref.isValid():
         try:
             tp.setReferenceTime(rs.reference_datetime(), layer.dataProvider().temporalCapabilities())
-        except Exception:
-            pass
+        except (AttributeError, TypeError) as exc:
+            log_exception("Reference time of %s" % os.path.basename(path), exc)
     styles.apply_default_style(rs)
     if add_to_project:
         project.addMapLayer(layer)

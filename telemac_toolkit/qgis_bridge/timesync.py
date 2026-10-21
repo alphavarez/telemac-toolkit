@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
+
 import numpy as np
 from qgis.core import Qgis, QgsDateTimeRange, QgsInterval
 from qgis.PyQt.QtCore import QObject, pyqtSignal
+
+from ..log import log_exception
 
 
 def _matching_closest_from_start():
@@ -63,10 +67,8 @@ class TimeSync(QObject):
     def disconnect_all(self):
         ctrl = self.controller()
         if ctrl is not None:
-            try:
+            with contextlib.suppress(TypeError, RuntimeError):  # not connected
                 ctrl.updateTemporalRange.disconnect(self._on_range)
-            except Exception:
-                pass
         self.rs = None
 
     def navigation(self):
@@ -84,8 +86,8 @@ class TimeSync(QObject):
         if m is not None:
             try:
                 tp.setMatchingMethod(m)
-            except Exception:  # pragma: no cover
-                pass
+            except (AttributeError, TypeError) as exc:  # pragma: no cover - older QGIS
+                log_exception("Temporal matching method", exc)
         ref = tp.referenceTime()
         self._ref = ref if ref.isValid() else rs.reference_datetime()
         t = rs.times

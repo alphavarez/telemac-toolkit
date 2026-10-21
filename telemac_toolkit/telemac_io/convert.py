@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Callable, Optional, Sequence, Union
 
-import numpy as np
 
 from .selafin import SelafinFile, SelafinWriter
 

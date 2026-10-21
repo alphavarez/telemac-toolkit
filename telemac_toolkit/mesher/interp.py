@@ -9,7 +9,7 @@ nearest node that has a value, so the geometry file never holds gaps.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 import numpy as np
 
@@ -225,7 +225,48 @@ def _check_formula(text: str):
             raise ValueError("only these functions are allowed: %s" % ", ".join(sorted(_FUNCS)))
         if isinstance(node, ast.Constant) and not isinstance(node.value, (int, float)):
             raise ValueError("only numbers are allowed as constants")
-    return compile(tree, "<bottom formula>", "eval")
+    return tree.body
+
+
+_BINOPS = {"Add": np.add, "Sub": np.subtract, "Mult": np.multiply, "Div": np.true_divide, "Pow": np.power,
+           "Mod": np.mod, "FloorDiv": np.floor_divide}
+_CMPOPS = {"Lt": np.less, "LtE": np.less_equal, "Gt": np.greater, "GtE": np.greater_equal, "Eq": np.equal,
+           "NotEq": np.not_equal}
+
+
+def _evaluate(node, env):
+    """Walk a checked formula tree (no eval): numbers, names from ``env``, arithmetic, comparisons, calls."""
+    import ast
+
+    if isinstance(node, ast.Constant):
+        return float(node.value)
+    if isinstance(node, ast.Name):
+        return env[node.id]
+    if isinstance(node, ast.UnaryOp):
+        v = _evaluate(node.operand, env)
+        return -v if isinstance(node.op, ast.USub) else +v
+    if isinstance(node, ast.BinOp):
+        return _BINOPS[type(node.op).__name__](_evaluate(node.left, env), _evaluate(node.right, env))
+    if isinstance(node, ast.Compare):
+        left, out = _evaluate(node.left, env), None
+        for op, comp in zip(node.ops, node.comparators):
+            right = _evaluate(comp, env)
+            r = _CMPOPS[type(op).__name__](left, right)
+            out = r if out is None else np.logical_and(out, r)
+            left = right
+        return out
+    if isinstance(node, ast.BoolOp):
+        vals = [_evaluate(v, env) for v in node.values]
+        fn = np.logical_and if isinstance(node.op, ast.And) else np.logical_or
+        out = vals[0]
+        for v in vals[1:]:
+            out = fn(out, v)
+        return out
+    if isinstance(node, ast.IfExp):
+        return np.where(_evaluate(node.test, env), _evaluate(node.body, env), _evaluate(node.orelse, env))
+    if isinstance(node, ast.Call):
+        return _FUNCS[node.func.id](*[_evaluate(a, env) for a in node.args])
+    raise ValueError("not allowed in a bottom formula: %s" % type(node).__name__)
 
 
 @dataclass
@@ -244,7 +285,7 @@ class FormulaSource:
     axis: Optional[np.ndarray] = None
 
     def __post_init__(self):
-        self._code = _check_formula(self.formula)
+        self._tree = _check_formula(self.formula)
         self.uses = formula_names(self.formula)
         if self.uses & {"s", "n"} and (self.axis is None or len(self.axis) < 2):
             raise ValueError("the formula uses s or n (channel coordinates) but no channel axis line is given")
@@ -252,7 +293,7 @@ class FormulaSource:
     def sample(self, px, py) -> np.ndarray:
         px = np.asarray(px, dtype=np.float64)
         py = np.asarray(py, dtype=np.float64)
-        env = {"__builtins__": {}, "x": px, "y": py}
+        env = {"x": px, "y": py}
         if self.uses & {"s", "n"}:
             from .planform import axis_coordinates
 
@@ -261,7 +302,8 @@ class FormulaSource:
             env["n"] = nv.reshape(px.shape)
         env.update(_FUNCS)
         env.update(_CONSTS)
-        v = eval(self._code, env)  # noqa: S307 - names and nodes are whitelisted above
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            v = _evaluate(self._tree, env)
         return np.broadcast_to(np.asarray(v, dtype=np.float64), px.shape).copy()
 
 

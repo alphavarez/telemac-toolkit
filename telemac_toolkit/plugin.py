@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import contextlib
 import traceback
 
 from qgis.core import Qgis, QgsApplication, QgsCoordinateReferenceSystem, QgsMeshLayer, QgsProject, QgsSettings
@@ -12,6 +13,7 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QFileDialog, QInputDialog, QMenu
 
 from .compat import QAction, exec_dialog
+from .log import log_exception
 from .gui.maptools import LiveCursorTool, ProbeTool, ProfileTool
 from .gui.plot_widget import PALETTE
 from .gui.mesh_panel import MeshPanel
@@ -83,8 +85,8 @@ class TelemacToolkitPlugin:
                 if w is not None:
                     self.timesync.nav_override = w.temporalController()
                     self.timesync.nav_override.updateTemporalRange.connect(self.timesync._on_range)
-            except Exception:
-                pass
+            except (ImportError, AttributeError, RuntimeError) as exc:
+                log_exception("Temporal Controller panel not found; the clock follows the canvas only", exc)
         self.dock = ResultsDock(self, self.iface.mainWindow())
         self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
         self.dock.hide()
@@ -171,18 +173,14 @@ class TelemacToolkitPlugin:
                 canvas.unsetMapTool(tool)
         self.probe_tool.clear()
         self.profile_tool.remove()
-        try:
+        with contextlib.suppress(TypeError, RuntimeError):  # not connected
             canvas.mapToolSet.disconnect(self._on_map_tool_set)
-        except Exception:
-            pass
         prj = QgsProject.instance()
         for sig, slot in ((prj.layersWillBeRemoved, self._on_layers_removed), (prj.readProject, self._adopt_project_layers),
                           (prj.layersAdded, self._adopt_project_layers),
                           (prj.cleared, self._on_project_cleared)):
-            try:
+            with contextlib.suppress(TypeError, RuntimeError):  # not connected
                 sig.disconnect(slot)
-            except Exception:
-                pass
         if self.timesync:
             self.timesync.disconnect_all()
         if self.drop_handler:
@@ -346,7 +344,8 @@ class TelemacToolkitPlugin:
                 rs = ResultSet(src, src, lyr)
                 rs.group_of_var, rs.group_of_pair = styles.group_mapping(rs)
                 self.results[lyr.id()] = rs
-            except Exception:
+            except Exception as exc:  # a broken layer must not stop the others
+                log_exception("Could not attach %s to the Results panel" % src, exc)
                 continue
         if self.dock:
             self.dock.refresh_result_list()
