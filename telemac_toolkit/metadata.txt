@@ -12,13 +12,31 @@ category=Mesh
 icon=icons/telemac.svg
 experimental=True
 deprecated=False
-supportsQt6=True
 homepage=https://github.com/alphavarez/telemac-toolkit/blob/main/docs/guide/README.md
 repository=https://github.com/alphavarez/telemac-toolkit
 tracker=https://github.com/alphavarez/telemac-toolkit/issues
 license=GPL-3.0-or-later
 hasProcessingProvider=yes
-changelog=0.4.0 - Arrow settings in the Results panel (regular grid spacing, length proportional with the fastest arrow fitting the spacing, fixed scale or same length, hide below, colour by magnitude; the 0.3.0 arrows mixed pixels and millimetres and overlapped); results open in view: CRS from a .prj, from the project when the coordinates fit its area of use, or asked (local laboratory grid or map CRS, saved as .prj), the map zooms or switches CRS when a result would be off screen, zoom and CRS buttons; Calculator (ddx, ddy, grad, div, curl, strain, Okubo-Weiss, Laplacian, tmax, tmin, tmean, tstd, tint, tpeak, ddt) and Integrals and fluxes (exact section discharges, line and area integrals, volumes); Edit node values of a mesh (replace, add, raise to, lower to, inside polygons with a transition, new variables, .cli kept); channel templates with circular bends and sine-generated meanders, structured cross-sections normal to the axis, bed formulas in channel coordinates s and n; liquid boundaries numbered exactly as TELEMAC (FRONT2) numbers them; automatic default element size; legend without duplicate entries.
-    0.3.0 - Mesher reorganised: Mesh workflow panel (project, draw, bottom and roughness, mesh and export, check); clearer layers (domain, islands, refinement areas and points, constraint lines with breakline or guide mode, fixed points, channels, grid zones, roughness zones, boundaries) with 0.2.0 projects still readable; local coordinates and straight channel or flume template with a bed formula; files written in map coordinates or shifted to (0, 0) with optional rotation; roughness zones (BOTTOM FRICTION for TELEMAC, material ids elsewhere); output to SELAFIN, 2DM, Gmsh, GiD, UGRID, MIKE 21, ADCIRC and HEC-RAS layers, with optional quadrilaterals; Export or convert mesh; Extract part of a mesh; find a node or element by number; GEOS triangulation made robust on straight edges.
-    0.2.0 - Mesher: mesh project template; unstructured generator with refinement, constraint lines, fixed points and islands; structured channel strips and regular grids; interpolation from rasters and points; boundary conditions from lines; mesh quality.
-    0.1.0 - Results: SELAFIN read/write library; results loader with readable names, styles and 3D support; Results panel synced with the Temporal Controller; live cursor, probe time series, animated water profile; Processing algorithms (file information, extract 2D from 3D, subset, time series at points, mesh boundary).
+changelog=
+    0.4.0
+    - Arrow settings: grid spacing, proportional or fixed-scale length, hide below, colour by magnitude
+    - Results open in view: CRS from a .prj or the project, or asked (local or map CRS); zoom and CRS buttons
+    - Calculator: algebra, ddx, ddy, grad, div, curl, strain, Laplacian, tmax, tmin, tmean, tint, tpeak, ddt
+    - Integrals and fluxes: discharge through sections, line and area integrals, volumes
+    - Edit node values of a mesh: replace, add, raise, lower, inside polygons; .cli kept
+    - Channel templates: straight flume, circular bend, sine-generated meanders; bed formulas in s and n
+    - Liquid boundaries numbered exactly as TELEMAC numbers them
+    - Automatic default element size; legend without duplicates
+    0.3.0
+    - Mesh workflow panel; clearer project layers (0.2.0 projects still open)
+    - Local coordinates and straight flume template; files shifted to (0, 0) with optional rotation
+    - Roughness zones; output to SELAFIN, 2DM, Gmsh, GiD, UGRID, MIKE 21, ADCIRC and HEC-RAS layers
+    - Export or convert mesh; extract part of a mesh; find a node or element by number
+    0.2.0
+    - Mesher: unstructured triangles with refinement, constraint lines, fixed points and islands
+    - Structured channels and regular grids; interpolation from rasters and points
+    - Boundary conditions from lines; mesh quality
+    0.1.0
+    - SELAFIN read/write library; results as styled mesh layers, 2D and 3D
+    - Results panel with the Temporal Controller; live cursor, time series, animated profiles
+    - Processing tools: file information, 2D from 3D, subset, time series at points, mesh boundary
