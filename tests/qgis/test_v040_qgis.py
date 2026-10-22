@@ -195,6 +195,27 @@ def test_calculator_and_integrals_algorithms(qgis, tmp_path):
     with SelafinFile(r["OUTPUT"]) as s:
         assert np.allclose(s.read("Q", 1), 0.12)
         assert np.allclose(s.read("HMAX", 0), 0.3)
+    # qgis_process loads the plugin with no QGIS window (iface None): LOAD must not try to open the result on a map
+    import qgis.utils
+
+    class Headless:
+        iface = None
+        opened = []
+
+        def open_path(self, path):
+            self.opened.append(path)
+
+    old = qgis.utils.plugins.get("telemac_toolkit")
+    qgis.utils.plugins["telemac_toolkit"] = Headless()
+    try:
+        processing.run("telemactoolkit:calculator", {"INPUT": p, "EXPRESSIONS": "HMAX [M] = tmax(H)",
+                                                     "KEEP": False, "OUTPUT": str(tmp_path / "c2.slf"), "LOAD": True})
+        assert Headless.opened == []
+    finally:
+        if old is None:
+            qgis.utils.plugins.pop("telemac_toolkit", None)
+        else:
+            qgis.utils.plugins["telemac_toolkit"] = old
     # discharge through a section drawn from the left bank (y = 2) to the right bank (y = 0)
     lines = QgsVectorLayer("LineString?crs=EPSG:32614&field=name:string", "sec", "memory")
     f = QgsFeature(lines.fields())

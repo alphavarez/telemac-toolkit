@@ -31,10 +31,33 @@ for f in res["OUTPUT"].getFeatures():
 The full demo cases are scripts: `scripts/make_flume_demo.py`, `scripts/make_bend_demo.py` (+
 `check_bend_demo.py`), `scripts/make_mesh_demo.py` (a valley from layers and a DEM).
 
+## From the command line, without opening QGIS
+
+`qgis_process` runs the same tools from a terminal or a batch file. It comes with QGIS (on Windows,
+`qgis_process-qgis.bat` or `qgis_process-qgis-ltr.bat` in the `bin` folder of the QGIS installation) and
+finds the plugin in your QGIS profile once it is enabled for it:
+
+```bat
+qgis_process plugins enable telemac_toolkit
+qgis_process run telemactoolkit:calculator -- INPUT=C:/work/r2d_bend.slf "EXPRESSIONS=HMAX [M] = tmax(H)" OUTPUT=C:/work/r2d_bend_max.slf
+qgis_process help telemactoolkit:generatemesh
+```
+
+With many parameters, pass them as JSON on standard input:
+
+```bat
+echo {"inputs": {"PROJECT": "C:/work/bend.gpkg", "FRICTION": 0.025, "OUTPUT": "C:/work/geo_bend.slf"}} | qgis_process run telemactoolkit:generatemesh -
+```
+
+This is the way to chain the plugin with a TELEMAC run in a script (build the mesh, run `telemac2d.py`,
+compute maxima and discharges), for example with TELEMAC in a Docker container and the files in a shared
+folder.
+
 ## The libraries without QGIS
 
 `telemac_toolkit/telemac_io` (SELAFIN, `.cli`, calculator, integrals) and `telemac_toolkit/mesher`
-(generator, planforms, writers) need only Python and NumPy:
+(generator, planforms, writers) need only Python and NumPy (the mesher also SciPy, for the triangulation),
+so they also run inside a TELEMAC container or on a cluster, next to the solver:
 
 ```python
 import sys; sys.path.insert(0, "path/to/telemac_toolkit")

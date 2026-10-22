@@ -166,7 +166,8 @@ class CalculatorAlgorithm(_Base):
         self._load = None
         if out:
             pl = _plugin()
-            if pl is not None and hasattr(pl, "open_path"):
+            # qgis_process and standalone scripts load the plugin without a QGIS window (iface is None)
+            if pl is not None and hasattr(pl, "open_path") and getattr(pl, "iface", None) is not None:
                 pl.open_path(out)
             else:
                 from qgis.core import QgsProcessingContext, QgsProcessingUtils

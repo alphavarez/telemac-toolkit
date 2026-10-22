@@ -21,4 +21,4 @@ from .cli import BoundaryTable, read_cli, write_cli  # noqa: F401
 from .mesh import TriangleLocator, boundary_loops, mesh_statistics, sample_polyline  # noqa: F401
 from . import variables  # noqa: F401
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"

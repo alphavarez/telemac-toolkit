@@ -16,7 +16,7 @@ class TelemacProvider(QgsProcessingProvider):
         return "TELEMAC Toolkit"
 
     def icon(self):
-        return QIcon(os.path.join(os.path.dirname(os.path.dirname(__file__)), "icons", "telemac.svg"))
+        return QIcon(os.path.join(os.path.dirname(os.path.dirname(__file__)), "icons", "plugin.svg"))
 
     def loadAlgorithms(self):
         for cls in ALGORITHMS + CALC_ALGORITHMS + MESH_ALGORITHMS:

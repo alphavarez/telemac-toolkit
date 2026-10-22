@@ -4,12 +4,12 @@ qgisMinimumVersion=3.44
 qgisMaximumVersion=4.99
 description=Build meshes, edit them and analyse results for TELEMAC in QGIS, with QGIS and Python only; export the same mesh to other 2D programs.
 about=A mesher made for TELEMAC: unstructured triangles with refinement areas and points, breaklines and guide lines, fixed points and islands, stitched to structured channel strips and regular grids; a step-by-step Mesh workflow panel; local coordinates and channel templates (straight flume, circular bend, sine-generated meanders) with a bed formula along the channel axis; bottom from rasters, survey points or a formula; roughness zones; boundary conditions (.cli, .liq) numbered as TELEMAC numbers them; node editing of existing meshes (replace, add, raise, lower, inside polygons); mesh quality, cut and conversion. Writes SELAFIN for TELEMAC and the same mesh as 2DM (BASEMENT, TUFLOW FV, SMS), Gmsh, GiD (Iber), UGRID (Delft3D FM), MIKE 21 FM and ADCIRC/SCHISM, plus HEC-RAS perimeter and breakline layers. Results: read and write SELAFIN in pure Python; open 2D and 3D results as styled mesh layers driven by the QGIS Temporal Controller, with arrow controls (spacing, scale, filter), a live cursor, probe time series and animated profiles; a calculator with gradients, divergence, vorticity, strain and time statistics; discharges through sections, fluxes, line and area integrals. Works on Windows, Linux and macOS, QGIS 3.44 LTR (Qt5) and QGIS 4 (Qt6). No dependency beyond NumPy, which ships with QGIS.
-version=0.4.1
+version=0.4.2
 author=Kevin Douglas Alvarez Segales
 email=alphavarez@gmail.com
 tags=telemac,selafin,serafin,hydraulics,flood,mesh,mesh generation,triangulation,hydrodynamic,2dm,gmsh,iber,hec-ras,flume,meander,temporal,vorticity,discharge,calculator
 category=Mesh
-icon=icons/telemac.svg
+icon=icons/plugin.svg
 experimental=True
 deprecated=False
 homepage=https://github.com/alphavarez/telemac-toolkit/blob/main/docs/guide/README.md
@@ -18,6 +18,10 @@ tracker=https://github.com/alphavarez/telemac-toolkit/issues
 license=GPL-3.0-or-later
 hasProcessingProvider=yes
 changelog=
+    0.4.2
+    - New plugin icon, legible in the plugin manager and on the plugin site
+    - Author name spelling
+    - Calculator from the command line (qgis_process): no error after the result is written
     0.4.1
     - Code quality: bottom formulas evaluated by a whitelisted expression walker (no eval)
     - Handled errors are logged to the TELEMAC Toolkit tab of the Log Messages panel instead of ignored
