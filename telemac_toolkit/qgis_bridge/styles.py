@@ -84,26 +84,36 @@ def _froude_items(vmax: float):
 def group_mapping(rs) -> Tuple[Dict[int, int], Dict[Tuple[int, int], int]]:
     """Map SELAFIN variable indices to MDAL dataset group indices.
 
-    MDAL names groups "<name lower-case> <unit>" and merges U/V pairs into one
-    vector group named after the common prefix ("velocity").
+    MDAL names groups "<name lower-case> <unit>" and merges component pairs into one
+    vector group: "VELOCITY U/V" -> "velocity", "FLOWRATE ALONG X/Y" -> "flowrate",
+    "DEBIT SUIVANT X/Y" -> "debit" (it drops the " u/v", " along x/y" and
+    " suivant x/y" endings; other "X/Y" names stay two scalar groups).
     """
     dp = rs.layer.dataProvider()
     names = [n.strip().lower() for n in rs.names]
     scalar: Dict[int, int] = {}
     vector: Dict[Tuple[int, int], int] = {}
+    keys = []
+    for i, j, _label in rs.pairs:
+        a, b = names[i], names[j]
+        k = 0
+        while k < min(len(a), len(b)) and a[k] == b[k]:
+            k += 1
+        key = " ".join(w for w in a[:k].split() if w not in ("along", "suivant"))
+        if key:
+            keys.append((key, (i, j)))
     for g in range(dp.datasetGroupCount()):
         meta = dp.datasetGroupMetadata(g)
         gname = meta.name().lower().strip()
         if meta.isVector():
-            for i, j, _label in rs.pairs:
-                a, b = names[i], names[j]
-                k = 0
-                while k < min(len(a), len(b)) and a[k] == b[k]:
-                    k += 1
-                prefix = a[:k].strip()
-                if prefix and gname.startswith(prefix) and (i, j) not in vector:
-                    vector[(i, j)] = g
-                    break
+            # the longest matching key wins, so "wind" cannot take a "wind stress" group
+            best = None
+            for key, pair in keys:
+                if pair not in vector and (gname == key or gname.startswith(key + " ") or gname.startswith(key)):
+                    if best is None or len(key) > len(best[0]):
+                        best = (key, pair)
+            if best is not None:
+                vector[best[1]] = g
         else:
             best, blen = None, -1
             for i, n in enumerate(names):
@@ -327,14 +337,44 @@ def apply_default_style(rs):
     dv = rs.default_variable()
     if dv in scalar:
         settings.setActiveScalarDatasetGroup(scalar[dv])
-    vel = next((g for (i, j), g in vector.items() if rs.names[i].strip().upper() in ("VELOCITY U", "VITESSE U")), None)
+    vel = default_arrow_group(rs)
+    rs.arrow_group = vel
     if vel is not None:
         settings.setActiveVectorDatasetGroup(vel)
     rs.layer.setRendererSettings(settings)
 
 
+def default_arrow_group(rs) -> Optional[int]:
+    """The vector group arrows show by default: velocity, else the first vector of the file."""
+    pairs = getattr(rs, "group_of_pair", {})
+    vel = next((g for (i, j), g in pairs.items() if rs.names[i].strip().upper() in ("VELOCITY U", "VITESSE U")), None)
+    return vel if vel is not None else next(iter(pairs.values()), None)
+
+
+def arrow_group(rs) -> Optional[int]:
+    """The vector group the arrows show now (None when they are off)."""
+    g = rs.layer.rendererSettings().activeVectorDatasetGroup()
+    return g if g >= 0 else None
+
+
+def set_arrow_group(rs, g: Optional[int]):
+    """Draw the arrows of vector group ``g`` (None: no arrows)."""
+    settings = rs.layer.rendererSettings()
+    settings.setActiveVectorDatasetGroup(-1 if g is None else int(g))
+    if g is not None:
+        rs.arrow_group = int(g)
+    rs.layer.setRendererSettings(settings)
+    rs.layer.triggerRepaint()
+    return True
+
+
 def set_active_variable(rs, var):
-    """Show a variable (index or (i, j) vector pair) as the coloured surface."""
+    """Show a variable (index or (i, j) vector pair) as the coloured surface.
+
+    A vector (velocity, unit discharge, wind ...) also moves the arrows to that
+    vector when arrows are on; a scalar (depth, free surface ...) has no direction
+    and keeps the arrows it had.
+    """
     settings = rs.layer.rendererSettings()
     g = None
     if isinstance(var, tuple):
@@ -344,20 +384,22 @@ def set_active_variable(rs, var):
     if g is None:
         return False
     settings.setActiveScalarDatasetGroup(g)
+    if isinstance(var, tuple) and settings.activeVectorDatasetGroup() >= 0:
+        settings.setActiveVectorDatasetGroup(g)
+        rs.arrow_group = g
     rs.layer.setRendererSettings(settings)
     rs.layer.triggerRepaint()
     return True
 
 
 def set_arrows_visible(rs, visible: bool):
-    settings = rs.layer.rendererSettings()
-    if visible:
-        vel = next(iter(getattr(rs, "group_of_pair", {}).values()), None)
-        if vel is None:
-            return False
-        settings.setActiveVectorDatasetGroup(vel)
-    else:
-        settings.setActiveVectorDatasetGroup(-1)
-    rs.layer.setRendererSettings(settings)
-    rs.layer.triggerRepaint()
-    return True
+    """Arrows on (the vector shown last, velocity at first) or off."""
+    if not visible:
+        return set_arrow_group(rs, None)
+    pairs = getattr(rs, "group_of_pair", {})
+    g = getattr(rs, "arrow_group", None)
+    if g not in pairs.values():
+        g = default_arrow_group(rs)
+    if g is None:
+        return False
+    return set_arrow_group(rs, g)

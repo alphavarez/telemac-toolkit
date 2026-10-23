@@ -86,7 +86,8 @@ class CalculatorAlgorithm(_Base):
             "New variables computed from the variables of a SELAFIN file, written to a new file (the original "
             "variables can be kept). One output per line: NAME [UNIT] = expression, in NumPy syntax. Each output "
             "can be used by its name in the following lines. Two outputs named 'NAME X' and 'NAME Y' (or U and V) "
-            "are shown as a vector with arrows.\n\n"
+            "are shown as a vector with arrows (X and Y are written to the file as 'NAME ALONG X/Y', the names "
+            "QGIS reads as a vector).\n\n"
             "Variables: TELEMAC symbols (U, V, H water depth, S free surface, B bottom, F Froude, Q unit "
             "discharge, M velocity magnitude, ...), names with underscores (WATER_DEPTH) or canonical ids "
             "(water_depth); x, y, t (time in s), area (area around each node), g = 9.81.\n\n"
@@ -149,6 +150,9 @@ class CalculatorAlgorithm(_Base):
             feedback.pushInfo("%s%s = %s   [%s%s]" % (o.name, " (%s)" % o.unit if o.unit else "", o.expr,
                                                        ("%.4g to %.4g" % (lo, hi)) if np.isfinite(lo) else "no finite value",
                                                        "" if o.time_dependent else ", same in every frame"))
+        for a, b in rep.renamed.items():
+            feedback.pushInfo(self.tr("%s written as %s, so that QGIS draws the X/Y pair as a vector with arrows")
+                              % (a, b))
         feedback.pushInfo(self.tr("%d frame(s) written to %s") % (len(rep.frames), out))
         crs = self.parameterAsCrs(parameters, "MESH_CRS", context)
         prj_in = os.path.splitext(src)[0] + ".prj"

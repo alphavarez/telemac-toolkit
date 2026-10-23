@@ -111,6 +111,81 @@ def test_arrow_style_fits_the_grid(qgis, tmp_path):
     assert st2.length_of(0.5, 1.0) == pytest.approx(2.5)
 
 
+def _arrow_direction(dark, tail):
+    """Unit direction (map axes: x east, y north) of the arrow drawn from pixel ``tail``.
+
+    QGIS starts each grid arrow at its grid point: the arrow is the dark component that
+    touches the tail, and its farthest pixel from the tail is the tip.
+    """
+    r0, c0 = tail
+    near = [(r, c) for r in range(r0 - 3, r0 + 4) for c in range(c0 - 3, c0 + 4) if dark[r, c]]
+    assert near, "no arrow at the grid point"
+    seen, todo = set(near), list(near)
+    while todo:
+        r, c = todo.pop()
+        for rr in (r - 1, r, r + 1):
+            for cc in (c - 1, c, c + 1):
+                if (rr, cc) not in seen and 0 <= rr < dark.shape[0] and 0 <= cc < dark.shape[1] and dark[rr, cc]:
+                    seen.add((rr, cc))
+                    todo.append((rr, cc))
+    r, c = max(seen, key=lambda p: (p[0] - r0) ** 2 + (p[1] - c0) ** 2)
+    dx, dy = c - c0, -(r - r0)  # image rows grow downwards
+    n = math.hypot(dx, dy)
+    assert n > 20, "arrow too short"
+    return dx / n, dy / n
+
+
+@pytest.mark.parametrize("lang", ["en", "fr"])
+def test_arrows_follow_the_vector_shown(qgis, tmp_path, lang):
+    from telemac_toolkit.qgis_bridge import styles
+    from telemac_toolkit.qgis_bridge.results import load_result
+
+    x, y, ik = regular_grid_mesh(0.0, 0.0, 1.0, 1.0, 10, 10, 0.0, "alternate")
+    one = np.ones_like(x)
+    # velocity to the east, unit discharge to the north, wind to the south-west
+    if lang == "en":
+        names = ("VELOCITY U", "VELOCITY V", "WATER DEPTH", "FLOWRATE ALONG X", "FLOWRATE ALONG Y",
+                 "WIND ALONG X", "WIND ALONG Y")
+    else:
+        names = ("VITESSE U", "VITESSE V", "HAUTEUR D'EAU", "DEBIT SUIVANT X", "DEBIT SUIVANT Y", "VENT X", "VENT Y")
+    vals = (1.0, 0.0, 0.3, 0.0, 0.3, -3.0, -3.0)
+    p = str(tmp_path / ("v_%s.slf" % lang))
+    write_selafin(p, x, y, ik, {n: v * one for n, v in zip(names, vals)})
+    rs = load_result(p, crs=QgsCoordinateReferenceSystem("EPSG:32614"), add_to_project=False)
+    vel, q = rs.group_of_pair[(0, 1)], rs.group_of_pair[(3, 4)]
+    if lang == "en":
+        wind = rs.group_of_pair[(5, 6)]
+    else:  # QGIS does not pair "VENT X/Y": no arrows for it, the plugin must not invent a group
+        assert (5, 6) not in rs.group_of_pair
+    assert len(set(rs.group_of_pair.values())) == len(rs.group_of_pair)
+    # opening: depth coloured, velocity arrows
+    assert styles.arrow_group(rs) == vel
+    # a scalar keeps the arrows; a vector moves them
+    styles.set_active_variable(rs, 2)
+    assert styles.arrow_group(rs) == vel
+    styles.set_active_variable(rs, (3, 4))
+    assert styles.arrow_group(rs) == q
+    styles.set_active_variable(rs, 2)
+    assert styles.arrow_group(rs) == q
+    styles.set_arrows_visible(rs, False)
+    assert styles.arrow_group(rs) is None
+    styles.set_active_variable(rs, (0, 1))  # arrows off stay off
+    assert styles.arrow_group(rs) is None
+    styles.set_arrows_visible(rs, True)
+    assert styles.arrow_group(rs) == q  # the vector shown last
+    # each vector is drawn in its own direction
+    st = styles.ArrowStyle(placement="grid", spacing=100, length="fixed", longest=15.0, min_value=0.0, width=1.0)
+    styles.apply_arrow_style(rs, st)
+    expected = [(vel, (1.0, 0.0)), (q, (0.0, 1.0))] + ([(wind, (-0.7071, -0.7071))] if lang == "en" else [])
+    for g, (ex, ey) in expected:
+        styles.set_arrow_group(rs, g)
+        s = rs.layer.rendererSettings()
+        s.setActiveScalarDatasetGroup(-1)
+        rs.layer.setRendererSettings(s)
+        dx, dy = _arrow_direction(_render(rs.layer, QgsRectangle(1, 1, 9, 9), size=300), tail=(100, 100))
+        assert dx * ex + dy * ey > 0.9, (g, dx, dy)
+
+
 def test_crs_suggestions(qgis, tmp_path):
     from telemac_toolkit.qgis_bridge.crs import Extent, is_local_crs, plausible, suggest_crs
 
@@ -305,3 +380,21 @@ def test_legend_categories(qgis, tmp_path):
     assert len(layers["channels"].renderer().categories()) == 3
     assert len(layers["constraint_lines"].renderer().categories()) == 2
     assert M.auto_default_size({"domain": layers["domain"]}) == 0.0
+
+
+def test_calculator_xy_outputs_get_arrows(qgis, tmp_path):
+    """'NAME X' / 'NAME Y' from the calculator open as one vector with arrows (QGIS pairs ALONG X/Y only)."""
+    from telemac_toolkit.qgis_bridge import styles
+    from telemac_toolkit.qgis_bridge.results import load_result
+    from telemac_toolkit.telemac_io.calculator import run_calculator
+
+    p = _uniform_result(str(tmp_path / "u.slf"), n=10)
+    out = str(tmp_path / "slope.slf")
+    run_calculator(p, out, "SLOPE X = 0.0 * H + 0.5\nSLOPE Y = 0.0 * H - 0.5")
+    rs = load_result(out, crs=QgsCoordinateReferenceSystem("EPSG:32614"), add_to_project=False)
+    labels = {lab: (i, j) for i, j, lab in rs.pairs}
+    assert set(labels) == {"Velocity", "Slope"}
+    g = rs.group_of_pair[labels["Slope"]]
+    assert g != rs.group_of_pair[labels["Velocity"]]
+    styles.set_active_variable(rs, labels["Slope"])
+    assert styles.arrow_group(rs) == g

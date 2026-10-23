@@ -220,7 +220,8 @@ Mesh projects made with 0.2.0 still open: their `outline`, `density`, `hard_line
 
 1. *Open TELEMAC result…* (or drag a `.slf` file onto QGIS).
 2. The *TELEMAC Results* panel opens. Use the play controls or the QGIS Temporal Controller.
-3. *Map shows* chooses the coloured variable; *Arrows* toggles velocity vectors and *Arrow settings*
+3. *Map shows* chooses the coloured variable; *Arrows* chooses the vector drawn as arrows (velocity, unit
+   discharge, wind…; choosing a vector on the map moves the arrows to it) and *Arrow settings*
    sets their spacing, length and colour; *Dry below* sets the depth under which cells are not drawn.
    The buttons next to the result list zoom to it, set its coordinate system and open the Calculator.
 4. Tabs: **Cursor** (live values), **Time series** (click the map with the probe tool, right-click to

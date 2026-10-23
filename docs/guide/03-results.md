@@ -60,7 +60,12 @@ The Results panel, the QGIS Temporal Controller, the plots and the cursor share 
 
 - **Map shows**: any variable of the file, plus vector magnitudes (velocity, unit discharge, wind) when the
   file has the components but not the magnitude.
-- **Arrows**: shows or hides the vector arrows.
+- **Arrows**: the vector drawn as arrows (*Off*, *Velocity*, *Unit discharge*, *Wind* … — every vector of
+  the file). Choosing a vector in *Map shows* moves the arrows to it, so the colours and the arrows show the
+  same quantity. A scalar (water depth, free surface, bottom …) has no direction: it keeps the arrows that
+  were shown, velocity at first, which is the usual view of depth with the flow direction on top.
+  Vectors are the pairs `… U / … V`, `… ALONG X / … ALONG Y` and `… SUIVANT X / … SUIVANT Y`, the names QGIS
+  reads as vectors; other `X / Y` pairs (`VENT X`, for example) are two separate maps.
 - **Dry below**: water depth under this value is not drawn (transparent), on the map and in profiles.
 
 Styles can be changed further in the layer properties (*Symbology*), as for any QGIS mesh layer.

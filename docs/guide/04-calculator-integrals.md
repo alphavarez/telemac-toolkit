@@ -18,7 +18,10 @@ NAME [UNIT] = expression
 - `NAME`: up to 16 characters (a SELAFIN limit), spaces allowed. `[UNIT]` is optional.
 - Lines starting with `#` are comments. Several outputs can share a line separated by `;`.
 - Each output can be used by name in the lines after it (spaces become `_`: `SLOPE X` → `SLOPE_X`).
-- Two outputs named `… X` and `… Y` (or `… U` and `… V`) are shown as a **vector with arrows**.
+- Two outputs named `… X` and `… Y` (or `… U` and `… V`) are shown as a **vector with arrows**. QGIS only
+  reads `… U / V` and `… ALONG X / Y` as vectors, so `SLOPE X` and `SLOPE Y` are written to the file as
+  `SLOPE ALONG X` and `SLOPE ALONG Y` (or `… U / V` when that would pass 16 characters); the report says so.
+  In later lines of the same calculation they keep their names (`SLOPE_X`).
 - A line without `NAME =` is called `RESULT`.
 
 ### Variables

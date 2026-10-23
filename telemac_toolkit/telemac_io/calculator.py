@@ -546,6 +546,32 @@ class RunReport:
     outputs: List[Output] = field(default_factory=list)
     frames: List[int] = field(default_factory=list)
     ranges: Dict[str, Tuple[float, float]] = field(default_factory=dict)
+    renamed: Dict[str, str] = field(default_factory=dict)
+
+
+def vector_file_names(names: Sequence[str], taken: Sequence[str] = ()) -> Dict[str, str]:
+    """New names for output pairs "<P> X" / "<P> Y", so that QGIS reads them as one vector.
+
+    QGIS (MDAL) pairs only "... U / ... V", "... ALONG X / Y" and "... SUIVANT X / Y";
+    "SLOPE X" and "SLOPE Y" would stay two separate maps without arrows. They are
+    written as "SLOPE ALONG X/Y", or "SLOPE U/V" when that is longer than the 16
+    characters of a SELAFIN name.
+    """
+    upper = [n.strip().upper() for n in names]
+    used = set(upper) | {t.strip().upper() for t in taken}
+    out: Dict[str, str] = {}
+    for n in upper:
+        if not n.endswith(" X") or n.endswith((" ALONG X", " SUIVANT X")):
+            continue
+        p = n[:-2].rstrip()
+        if not p or p + " Y" not in upper:
+            continue
+        for a, b in ((p + " ALONG X", p + " ALONG Y"), (p + " U", p + " V")):
+            if len(a) <= 16 and a not in used and b not in used:
+                out[n], out[p + " Y"] = a, b
+                used.update((a, b))
+                break
+    return out
 
 
 def run_calculator(src: str, dst: str, text: str, keep: bool = True, frames: Optional[Sequence[int]] = None,
@@ -568,9 +594,10 @@ def run_calculator(src: str, dst: str, text: str, keep: bool = True, frames: Opt
             frames = list(range(n)) if (calc.time_dependent or keep) else [n - 1]
         if not calc.time_dependent and not keep:
             frames = [frames[-1]]
-        names = (list(h.var_names) if keep else []) + [o.name for o in outs]
+        renamed = vector_file_names([o.name for o in outs], existing)
+        names = (list(h.var_names) if keep else []) + [renamed.get(o.name, o.name) for o in outs]
         units = (list(h.var_units) if keep else []) + [o.unit for o in outs]
-        rep = RunReport(outputs=outs, frames=list(frames))
+        rep = RunReport(outputs=outs, frames=list(frames), renamed=renamed)
         lo = {o.name: np.inf for o in outs}
         hi = {o.name: -np.inf for o in outs}
         with writer_like(h, dst, names, units, title=(h.title.strip() + " + calculator")[:72]) as w:

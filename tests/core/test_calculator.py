@@ -133,20 +133,34 @@ WETVORT = where(H > 0.15, VORTICITY, 0)
     with SelafinFile(out) as s:
         names = [n.strip() for n in s.var_names]
         assert names[:5] == ["VELOCITY U", "VELOCITY V", "WATER DEPTH", "FREE SURFACE", "BOTTOM"]
-        assert "VORTICITY" in names and "SLOPE X" in names
+        assert "VORTICITY" in names and "SLOPE ALONG X" in names and "SLOPE ALONG Y" in names  # a vector for QGIS
         assert np.allclose(s.read("VORTICITY", 2), 0.4, atol=1e-6)
         assert np.allclose(s.read("HMAX", 0), H[-1], atol=1e-6)
         assert np.allclose(s.read("TPEAK", 0), 30.0)
         assert np.allclose(s.read("RISE", 1), 0.01, atol=1e-6)  # 0.1 m per 10 s
         assert np.allclose(s.read("VOLUME RATE", 0), np.trapezoid(H, times, axis=0) if hasattr(np, "trapezoid")
                            else np.trapz(H, times, axis=0), atol=1e-4)
-        assert np.allclose(s.read("SLOPE X", 0), 0.02 - 0.01, atol=1e-6)
+        assert np.allclose(s.read("SLOPE ALONG X", 0), 0.02 - 0.01, atol=1e-6)
         wv = s.read("WETVORT", 0)
         assert np.all((wv == 0) | (np.abs(wv - 0.4) < 1e-5))
     from telemac_toolkit.telemac_io.variables import vector_pairs
 
     with SelafinFile(out) as s:
-        assert any(lab.lower().startswith("slope") for _i, _j, lab in vector_pairs(s.var_names))
+        assert [lab for _i, _j, lab in vector_pairs(s.var_names)] == ["Velocity", "Slope"]
+    assert rep.renamed == {"SLOPE X": "SLOPE ALONG X", "SLOPE Y": "SLOPE ALONG Y"}
+
+
+def test_vector_file_names():
+    from telemac_toolkit.telemac_io.calculator import vector_file_names
+
+    assert vector_file_names(["GRAD X", "GRAD Y", "H2"]) == {"GRAD X": "GRAD ALONG X", "GRAD Y": "GRAD ALONG Y"}
+    # too long for "ALONG": U/V instead (16 characters at most)
+    assert vector_file_names(["WATER SLOPE X", "WATER SLOPE Y"]) == {"WATER SLOPE X": "WATER SLOPE U",
+                                                                      "WATER SLOPE Y": "WATER SLOPE V"}
+    # already a vector for QGIS, or no partner: unchanged
+    assert vector_file_names(["Q ALONG X", "Q ALONG Y", "A U", "A V", "LONE X"]) == {}
+    # a name already in the file is never reused
+    assert vector_file_names(["G X", "G Y"], taken=["G ALONG X"]) == {"G X": "G U", "G Y": "G V"}
 
 
 def test_calculator_static_output_and_errors(tmp_path):

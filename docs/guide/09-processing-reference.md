@@ -8,7 +8,7 @@ Every tool of the plugin is in the Processing toolbox under **TELEMAC Toolkit**,
 
 Id: `telemactoolkit:calculator`
 
-New variables computed from the variables of a SELAFIN file, written to a new file (the original variables can be kept). One output per line: NAME [UNIT] = expression, in NumPy syntax. Each output can be used by its name in the following lines. Two outputs named 'NAME X' and 'NAME Y' (or U and V) are shown as a vector with arrows.
+New variables computed from the variables of a SELAFIN file, written to a new file (the original variables can be kept). One output per line: NAME [UNIT] = expression, in NumPy syntax. Each output can be used by its name in the following lines. Two outputs named 'NAME X' and 'NAME Y' (or U and V) are shown as a vector with arrows (X and Y are written to the file as 'NAME ALONG X/Y', the names QGIS reads as a vector).
 
 Variables: TELEMAC symbols (U, V, H water depth, S free surface, B bottom, F Froude, Q unit discharge, M velocity magnitude, ...), names with underscores (WATER_DEPTH) or canonical ids (water_depth); x, y, t (time in s), area (area around each node), g = 9.81.
 

@@ -404,3 +404,43 @@ def test_probe_algorithm_transforms_points(env):
                                                             "MESH_CRS": "EPSG:32614", "OUTPUT": "memory:"})["OUTPUT"]
     vals = [g["water_depth"] for g in out.getFeatures()]
     assert len(vals) == 31 and max(vals) > 3.5
+
+
+def test_arrow_list_follows_the_map_vector(env):
+    """The panel's arrow list: Off + every vector; choosing a vector on the map moves the arrows to it."""
+    plugin, iface, tmp = env
+    from telemac_toolkit.mesher.regular import regular_grid_mesh
+    from telemac_toolkit.qgis_bridge import styles
+    from telemac_toolkit.telemac_io import write_selafin
+
+    x, y, ik = regular_grid_mesh(500000.0, 2000000.0, 10.0, 10.0, 10, 10, 0.0, "alternate")
+    one = np.ones_like(x)
+    p = str(tmp / "three_vectors.slf")
+    write_selafin(p, x, y, ik, {"VELOCITY U": one, "VELOCITY V": 0 * one, "WATER DEPTH": 0.3 * one,
+                                "FLOWRATE ALONG X": 0 * one, "FLOWRATE ALONG Y": 0.3 * one,
+                                "WIND ALONG X": -3 * one, "WIND ALONG Y": -3 * one},
+                  units={"VELOCITY U": "M/S", "VELOCITY V": "M/S", "WATER DEPTH": "M", "FLOWRATE ALONG X": "M2/S",
+                         "FLOWRATE ALONG Y": "M2/S", "WIND ALONG X": "M/S", "WIND ALONG Y": "M/S"})
+    rs = plugin.open_path(p)
+    d = plugin.dock
+    assert d.rs is rs
+
+    def show(v):  # QComboBox.findData does not match Python tuples
+        d.map_var.setCurrentIndex(next(k for k in range(d.map_var.count()) if d.map_var.itemData(k) == v))
+
+    labels = [d.arrows.itemText(k) for k in range(d.arrows.count())]
+    assert labels == ["Off", "Velocity (m/s)", "Unit discharge (m2/s)", "Wind (m/s)"]
+    assert d.arrows.currentText() == "Velocity (m/s)"
+    assert "m/s" in d.ar_ref.text()
+    show((3, 4))  # unit discharge on the map
+    assert d.arrows.currentText() == "Unit discharge (m2/s)"
+    assert styles.arrow_group(rs) == rs.group_of_pair[(3, 4)]
+    assert "m2/s" in d.ar_ref.text()
+    show(2)  # depth: no direction, arrows unchanged
+    assert d.arrows.currentText() == "Unit discharge (m2/s)"
+    d.arrows.setCurrentIndex(d.arrows.findText("Wind (m/s)"))
+    assert styles.arrow_group(rs) == rs.group_of_pair[(5, 6)]
+    d.arrows.setCurrentIndex(0)
+    assert styles.arrow_group(rs) is None
+    show((0, 1))  # arrows off stay off
+    assert styles.arrow_group(rs) is None and d.arrows.currentIndex() == 0

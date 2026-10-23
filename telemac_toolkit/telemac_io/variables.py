@@ -128,7 +128,8 @@ def vector_pairs(names: Iterable[str]) -> List[Tuple[int, int, str]]:
     for i, n in enumerate(norm):
         if i in used:
             continue
-        for a, b in ((" U", " V"), (" X", " Y"), (" ALONG X", " ALONG Y")):
+        # the longest endings first: "SLOPE ALONG X" is the vector "Slope", not "Slope along"
+        for a, b in ((" ALONG X", " ALONG Y"), (" SUIVANT X", " SUIVANT Y"), (" U", " V"), (" X", " Y")):
             if n.endswith(a):
                 partner = n[: -len(a)] + b
                 if partner in norm:

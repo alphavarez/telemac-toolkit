@@ -136,11 +136,13 @@ class ResultsDock(QgsDockWidget):
         self.map_var = QComboBox()
         self.map_var.currentIndexChanged.connect(self._on_map_var)
         mrow.addWidget(self.map_var, 1)
-        self.arrows = QCheckBox(self.tr("Arrows"))
-        self.arrows.setChecked(True)
-        self.arrows.toggled.connect(self._on_arrows)
-        mrow.addWidget(self.arrows)
         form.addRow(self.tr("Map shows"), mrow)
+        self.arrows = QComboBox()
+        self.arrows.setToolTip(self.tr("Vector drawn as arrows. Choosing a vector in 'Map shows' (velocity, unit "
+                                       "discharge, wind …) moves the arrows to it; a scalar (depth, free surface …) "
+                                       "has no direction and keeps the arrows shown."))
+        self.arrows.currentIndexChanged.connect(self._on_arrows)
+        form.addRow(self.tr("Arrows"), self.arrows)
         self.dry = QDoubleSpinBox()
         self.dry.setDecimals(3)
         self.dry.setRange(0.0, 10.0)
@@ -342,7 +344,11 @@ class ResultsDock(QgsDockWidget):
         if not pairs:
             self.ar_ref.setText(self.tr("This result has no vector variable."))
             return
-        (i, _j), g = next(iter(pairs.items()))
+        g = styles.arrow_group(rs)
+        if g not in pairs.values():
+            self.ar_ref.setText("<span style='color:gray'>%s</span>" % self.tr("Arrows are off."))
+            return
+        i = next(p[0] for p, gg in pairs.items() if gg == g)
         vmax = styles.group_max_magnitude(rs.layer, g)
         unit = rs.units[i].strip().lower() or self.tr("units")
         if st.length == "fixed":
@@ -488,8 +494,14 @@ class ResultsDock(QgsDockWidget):
         for combo in (self.map_var, self.ts_var, self.pr_var):
             combo.blockSignals(False)
         self.arrows.blockSignals(True)
-        self.arrows.setEnabled(bool(getattr(rs, "group_of_pair", {})))
-        self.arrows.setChecked(rs.layer.rendererSettings().activeVectorDatasetGroup() >= 0)
+        self.arrows.clear()
+        self.arrows.addItem(self.tr("Off"), None)
+        labels = {(i, j): lab for i, j, lab in rs.pairs}
+        for pair, g in sorted(getattr(rs, "group_of_pair", {}).items(), key=lambda kv: kv[1]):
+            u = rs.units[pair[0]].strip().lower()
+            self.arrows.addItem("%s%s" % (labels.get(pair, self.tr("Vector")), " (%s)" % u if u else ""), g)
+        self.arrows.setEnabled(self.arrows.count() > 1)
+        self._sync_arrow_combo()
         self.arrows.blockSignals(False)
         self.dry.setValue(rs.dry_threshold)
         self._update_arrow_reference()
@@ -570,10 +582,22 @@ class ResultsDock(QgsDockWidget):
         v = self.map_var.currentData()
         if v is not None:
             styles.set_active_variable(self.rs, v)
+            self._sync_arrow_combo()
 
-    def _on_arrows(self, on):
+    def _sync_arrow_combo(self):
+        """Show in the arrow list the vector the layer draws now."""
+        if self.rs is None:
+            return
+        k = self.arrows.findData(styles.arrow_group(self.rs))
+        blocked = self.arrows.blockSignals(True)
+        self.arrows.setCurrentIndex(max(k, 0))
+        self.arrows.blockSignals(blocked)
+        self._update_arrow_reference()
+
+    def _on_arrows(self, _idx):
         if self.rs is not None:
-            styles.set_arrows_visible(self.rs, on)
+            styles.set_arrow_group(self.rs, self.arrows.currentData())
+            self._update_arrow_reference()
 
     def _on_dry(self):
         rs = self.rs
