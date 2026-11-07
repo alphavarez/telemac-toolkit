@@ -11,6 +11,8 @@ from telemac_toolkit.mesher.sizefield import SizeField
 from telemac_toolkit.telemac_io.cli import liquid_boundaries
 from telemac_toolkit.telemac_io.mesh import boundary_loops
 
+scipy = pytest.importorskip("scipy")  # triangulate_scipy needs it
+
 
 @pytest.fixture(scope="module")
 def square():
