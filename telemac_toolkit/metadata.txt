@@ -45,8 +45,14 @@ changelog=
     - The whole chain tested in TELEMAC-2D v9.1 (meandering river, river network, Gmsh mesh, re-meshed and edited meshes, laboratory expansion)
     Fixes and other changes
     - Generate mesh overwrites a mesh loaded in QGIS on Windows (before: OSError Errno 22); the local laboratory grid is a named QGIS CRS; a CRS without an EPSG code is matched to its EPSG equivalent
-    - Arrows follow the vector shown (velocity, unit discharge, wind); calculator X/Y outputs drawn as arrows; calculator runs from qgis_process
-    - New plugin icon; author name spelling
+    0.4.3
+    - Arrows follow the vector shown on the map (velocity, unit discharge, wind); an Arrows list in the Results panel
+    - Unit discharge (FLOWRATE ALONG X/Y, DEBIT SUIVANT X/Y) and wind are recognised as vectors
+    - Calculator: NAME X / NAME Y outputs are written as NAME ALONG X/Y, so QGIS draws them with arrows
+    0.4.2
+    - New plugin icon, legible in the plugin manager and on the plugin site
+    - Author name spelling
+    - Calculator from the command line (qgis_process): no error after the result is written
     0.4.1
     - Code quality: bottom formulas evaluated by a whitelisted expression walker (no eval)
     - Handled errors are logged to the TELEMAC Toolkit tab of the Log Messages panel instead of ignored

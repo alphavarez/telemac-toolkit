@@ -69,8 +69,8 @@ Los puntos de la cuadrícula caen fuera del canal con este zoom: baja la separac
 mesh node*.
 
 **Las flechas muestran siempre la velocidad, aunque elija otra variable.**
-En las versiones anteriores a la 0.5.0 solo se podía dibujar como flechas la velocidad, y el cambio de
-variable en *Map shows* no movía las flechas. Desde la 0.5.0, la lista *Arrows* enumera todos los vectores
+En las versiones anteriores a la 0.4.3 solo se podía dibujar como flechas la velocidad, y el cambio de
+variable en *Map shows* no movía las flechas. Desde la 0.4.3, la lista *Arrows* enumera todos los vectores
 del archivo (velocidad, caudal unitario, viento) y las flechas siguen al vector que eliges en *Map shows*. Si
 eliges un escalar (tirante, superficie libre), no tiene dirección y las flechas se quedan como estaban. Si
 tu archivo trae un vector con nombres que QGIS no reconoce como par (por ejemplo `VENT X` / `VENT Y`), se

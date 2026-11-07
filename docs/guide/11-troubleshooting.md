@@ -66,7 +66,7 @@ The grid points fall outside the channel at this zoom: lower the spacing, zoom i
 node*.
 
 **The arrows always show velocity, even when I choose another variable.**
-Before 0.5.0 only velocity could be drawn as arrows, and *Map shows* did not move them. Since 0.5.0 the
+Before 0.4.3 only velocity could be drawn as arrows, and *Map shows* did not move them. Since 0.4.3 the
 *Arrows* list has every vector of the file (velocity, unit discharge, wind) and the arrows follow the vector
 you choose in *Map shows*. A scalar (water depth, free surface) has no direction, so the arrows stay as they
 were. A vector whose names QGIS does not read as a pair (for example `VENT X` / `VENT Y`) is shown as two

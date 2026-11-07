@@ -1,7 +1,7 @@
 # TELEMAC Toolkit — changelog
 
 Newest first. Each version is tested in QGIS 3.44 LTR and QGIS 4; from 0.5.0 also with TELEMAC-2D v9.1 runs.
-0.5.0 gathers the development builds 0.4.2 to 0.8.6, which were not published.
+0.5.0 gathers the development builds 0.4.4 to 0.8.6, which were not published.
 
 ## 0.5.1 — 2026-11-06
 
@@ -42,8 +42,18 @@ Newest first. Each version is tested in QGIS 3.44 LTR and QGIS 4; from 0.5.0 als
 ### Fixes and other changes
 
 - Generate mesh overwrites a mesh loaded in QGIS on Windows (before: OSError Errno 22); the local laboratory grid is a named QGIS CRS; a CRS without an EPSG code is matched to its EPSG equivalent
-- Arrows follow the vector shown (velocity, unit discharge, wind); calculator X/Y outputs drawn as arrows; calculator runs from qgis_process
-- New plugin icon; author name spelling
+
+## 0.4.3 — 2026-10-22
+
+- Arrows follow the vector shown on the map (velocity, unit discharge, wind); an Arrows list in the Results panel
+- Unit discharge (FLOWRATE ALONG X/Y, DEBIT SUIVANT X/Y) and wind are recognised as vectors
+- Calculator: NAME X / NAME Y outputs are written as NAME ALONG X/Y, so QGIS draws them with arrows
+
+## 0.4.2 — 2026-10-21
+
+- New plugin icon, legible in the plugin manager and on the plugin site
+- Author name spelling
+- Calculator from the command line (qgis_process): no error after the result is written
 
 ## 0.4.1 — 2026-10-21
 
