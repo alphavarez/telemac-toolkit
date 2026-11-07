@@ -54,6 +54,7 @@ from qgis.core import (
 from qgis.PyQt.QtCore import QMetaType
 from qgis.PyQt.QtGui import QColor
 
+from ..log import log_exception
 from ..mesher import MeshInput, MeshResult, Submesh, generate
 from ..mesher.channel import channel_strip
 from ..mesher.backends import triangulate_geos
@@ -288,8 +289,8 @@ def open_mesh_project(path: str) -> Dict[str, QgsVectorLayer]:
             if key in titles:
                 try:
                     ensure_fields(lyr, key)  # fields added by later versions (empty for older features)
-                except Exception:  # noqa: BLE001 - a read-only file stays as it is
-                    pass
+                except Exception as exc:  # noqa: BLE001 - a read-only file stays as it is
+                    log_exception("adding the new fields to %s" % name, exc)
             style_project_layer(lyr, key)
             if not lyr.crs().authid() and is_local_crs(lyr.crs()):
                 lyr.setCrs(local_crs())  # named in QGIS instead of "Unknown CRS"
@@ -545,16 +546,14 @@ def tip_colors():
     def lum(c):
         return 0.2126 * c.redF() + 0.7152 * c.greenF() + 0.0722 * c.blueF()
 
-    try:
-        from qgis.PyQt.QtGui import QPalette
-        from qgis.PyQt.QtWidgets import QApplication
+    from qgis.PyQt.QtGui import QPalette
+    from qgis.PyQt.QtWidgets import QApplication
 
+    if isinstance(QApplication.instance(), QApplication):  # not when headless (qgis_process): the light pair
         pal = QApplication.palette()
         bg, fg = pal.color(QPalette.ColorRole.Base), pal.color(QPalette.ColorRole.Text)
         if abs(lum(bg) - lum(fg)) >= 0.5:
             return bg.name(), fg.name()
-    except Exception:  # noqa: BLE001 - no application palette (headless): the light pair
-        pass
     return "#ffffff", "#1a1a1a"
 
 
@@ -564,8 +563,8 @@ def refresh_map_tips(layers: Dict[str, object]) -> None:
         try:
             if key in LAYER_KEYS and isinstance(lyr, QgsVectorLayer):
                 _map_tip(lyr, key)
-        except Exception:  # noqa: BLE001 - a tip never stops a project from opening
-            pass
+        except Exception as exc:  # noqa: BLE001 - a tip never stops a project from opening
+            log_exception("hover tip of %s" % key, exc)
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 **English** · [Español](../guia/README.md)
 
-Version 0.5.0 · QGIS 3.44 LTR and QGIS 4.x · Windows, Linux, macOS
+Version 0.5.1 · QGIS 3.44 LTR and QGIS 4.x · Windows, Linux, macOS
 
 TELEMAC Toolkit builds meshes and analyses results for TELEMAC inside QGIS, with nothing but QGIS and
 Python. The mesher is made for TELEMAC first and writes the same mesh for other 2D programs (BASEMENT,

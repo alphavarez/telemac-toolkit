@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
+# subprocess runs only MMG's mmg2d program (run_mmg2d)
+import subprocess  # nosec B404
 import tempfile
 from typing import List, Optional, Sequence, Tuple
 
@@ -104,6 +105,8 @@ def run_mmg2d(x, y, ikle, sizes: Optional[np.ndarray] = None, optimise: bool = F
               extra: Sequence[str] = ()) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[str]]:
     """Run mmg2d on the mesh; returns (x, y, ikle, log lines). The boundary nodes keep their coordinates."""
     prog = find_mmg2d(exe)
+    if prog is not None and not (os.path.isfile(prog) and os.access(prog, os.X_OK)):
+        raise ValueError("%s is not a program that can be run (give the path of mmg2d_O3)" % prog)
     if prog is None:
         raise ValueError("mmg2d was not found: install MMG (https://www.mmgtools.org, or conda-forge 'mmgsuite') and give "
                          "the path of mmg2d_O3, or put it on the PATH")
@@ -124,8 +127,10 @@ def run_mmg2d(x, y, ikle, sizes: Optional[np.ndarray] = None, optimise: bool = F
         for flag, val in (("-hmin", hmin), ("-hmax", hmax), ("-hgrad", hgrad), ("-hausd", hausd)):
             if val is not None and val > 0:
                 cmd += [flag, "%.10g" % val]
-        cmd += list(extra)
-        run = subprocess.run(cmd, cwd=work, capture_output=True, text=True, timeout=timeout)
+        cmd += [str(a) for a in extra]
+        # the user's own mmg2d (checked to be an existing program file), an argument list and no shell: nothing
+        # from a drawing or a file name reaches a command line
+        run = subprocess.run(cmd, cwd=work, capture_output=True, text=True, timeout=timeout, shell=False)  # nosec B603
         log = [line for line in (run.stdout + run.stderr).splitlines() if line.strip()]
         if run.returncode != 0 or not os.path.exists(dst):
             raise ValueError("mmg2d failed (exit %d): %s" % (run.returncode, " | ".join(log[-6:])))

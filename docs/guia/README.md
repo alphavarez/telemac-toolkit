@@ -2,7 +2,7 @@
 
 [English](../guide/README.md) · **Español**
 
-Versión 0.5.0 · QGIS 3.44 LTR y QGIS 4.x · Windows, Linux, macOS
+Versión 0.5.1 · QGIS 3.44 LTR y QGIS 4.x · Windows, Linux, macOS
 
 TELEMAC Toolkit construye mallas y analiza resultados de TELEMAC dentro de QGIS, usando solamente QGIS y
 Python. El generador de mallas está hecho primero para TELEMAC y escribe la misma malla para otros programas

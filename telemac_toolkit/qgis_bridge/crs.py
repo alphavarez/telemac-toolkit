@@ -65,8 +65,10 @@ def local_crs() -> QgsCoordinateReferenceSystem:
         uid = reg.addUserCrs(crs, LOCAL_CRS_NAME, Qgis.CrsDefinitionFormat.Wkt)
         if uid and uid > 0:
             return QgsCoordinateReferenceSystem("USER:%d" % uid)
-    except Exception:  # noqa: BLE001 - an unregistered CRS works too, only without a name in QGIS
-        pass
+    except Exception as exc:  # noqa: BLE001 - an unregistered CRS works too, only without a name in QGIS
+        from ..log import log_exception
+
+        log_exception("registering the local laboratory CRS", exc)
     return crs
 
 

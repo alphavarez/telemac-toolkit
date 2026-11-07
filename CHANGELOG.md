@@ -3,6 +3,10 @@
 Newest first. Each version is tested in QGIS 3.44 LTR and QGIS 4; from 0.5.0 also with TELEMAC-2D v9.1 runs.
 0.5.0 gathers the development builds 0.4.2 to 0.8.6, which were not published.
 
+## 0.5.1 — 2026-11-06
+
+- Security scan (Bandit) clean: errors the plugin works around are written to the TELEMAC Toolkit log instead of ignored; the MMG call runs only the mmg2d program you set (checked to be a program), with an argument list and no shell
+
 ## 0.5.0 — 2026-11-06
 
 ### Meshing
