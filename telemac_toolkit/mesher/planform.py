@@ -34,13 +34,22 @@ class Planform:
     axis: np.ndarray     # (n, 2) centreline vertices, evenly spaced along it
     heading: np.ndarray  # (n,) radians, counter-clockwise from x
     s: np.ndarray        # (n,) distance along the axis
-    width: float
+    width: object        # a number, or (n,) widths at the vertices
     kind: str = "straight"
+
+    @property
+    def widths(self) -> np.ndarray:
+        return np.broadcast_to(np.asarray(self.width, dtype=np.float64), self.s.shape).copy()
+
+    @property
+    def varies(self) -> bool:
+        w = self.widths
+        return bool(np.ptp(w) > 1e-9 * max(float(w.max()), 1e-300))
 
     def bank(self, side: int) -> np.ndarray:
         """+1 = left bank, -1 = right bank (looking downstream)."""
-        h = 0.5 * self.width * side
-        return self.axis + h * np.stack([-np.sin(self.heading), np.cos(self.heading)], axis=1)
+        h = 0.5 * self.widths * side
+        return self.axis + h[:, None] * np.stack([-np.sin(self.heading), np.cos(self.heading)], axis=1)
 
     @property
     def left(self) -> np.ndarray:
@@ -66,6 +75,12 @@ class Planform:
         ax = self.axis[:, 0] * c - self.axis[:, 1] * s + origin[0]
         ay = self.axis[:, 0] * s + self.axis[:, 1] * c + origin[1]
         return Planform(np.stack([ax, ay], axis=1), self.heading + a, self.s.copy(), self.width, self.kind)
+
+    def trimmed(self, start: int = 0, end: int = 0) -> "Planform":
+        """Without ``start`` stations at its start and ``end`` at its end."""
+        k = slice(start, len(self.s) - end)
+        w = self.width if np.ndim(self.width) == 0 else np.asarray(self.width)[k]
+        return Planform(self.axis[k], self.heading[k], self.s[k], w, self.kind)
 
 
 def _segments(total: float, step: float) -> int:

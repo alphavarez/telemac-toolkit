@@ -17,8 +17,13 @@ __all__ = ["regular_grid_mesh", "structured_quad_mesh"]
 
 
 def regular_grid_mesh(x0: float, y0: float, dx: float, dy: float, nx: int, ny: int,
-                      angle_deg: float = 0.0, pattern: str = "alternate"):
-    """Return (x, y, ikle) for nx by ny cells starting at (x0, y0) (lower-left corner)."""
+                      angle_deg: float = 0.0, pattern: str = "right"):
+    """Return (x, y, ikle) for nx by ny cells starting at (x0, y0) (lower-left corner).
+
+    ``pattern``: "right" cuts every cell along the same diagonal (six triangles at each interior node);
+    "alternate" flips it from cell to cell (four and eight in turn, which can make TELEMAC's depths
+    oscillate from node to node).
+    """
     if nx < 1 or ny < 1 or dx <= 0 or dy <= 0:
         raise ValueError("cell counts must be >= 1 and cell sizes > 0")
     i, j = np.meshgrid(np.arange(nx + 1), np.arange(ny + 1))

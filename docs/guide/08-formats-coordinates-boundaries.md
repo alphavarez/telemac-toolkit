@@ -59,7 +59,8 @@ write the TELEMAC `.cli`:
 - Every boundary node is a **wall** (2 2 2) except the nodes near a boundary line, which take its type:
   `Q` (4 5 5), `H` (5 4 4), `QH` (5 5 5), `UV` (4 6 6), `UVH` (5 6 6), `free` (4 4 4), `waves` (1 1 1),
   or a three-digit code.
-- "Near" = within half the boundary edge length (or the snapping distance you give).
+- "Near" = within half the shorter boundary edge at that node (or the snapping distance you give), so a
+  line ends cleanly where coarse floodplain edges meet fine river edges.
 - Nodes are listed in TELEMAC order: outer boundary counter-clockwise, then islands.
 
 ### Liquid boundary numbers

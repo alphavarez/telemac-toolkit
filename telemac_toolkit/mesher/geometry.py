@@ -8,6 +8,7 @@ import numpy as np
 
 __all__ = [
     "as_ring",
+    "same_point",
     "ring_area",
     "points_in_rings",
     "distance_to_segments",
@@ -19,10 +20,19 @@ __all__ = [
 ]
 
 
+def same_point(p, q) -> bool:
+    """True when two points are the same up to rounding. An absolute test: np.allclose's relative tolerance
+    (1e-5) would take two vertices 1 m apart at 100 km from the origin (5 m in UTM) for one."""
+    p = np.asarray(p, dtype=np.float64)[:2]
+    q = np.asarray(q, dtype=np.float64)[:2]
+    scale = max(1.0, float(np.max(np.abs(p))), float(np.max(np.abs(q))))
+    return bool(np.all(np.abs(p - q) <= 1e-12 * scale))
+
+
 def as_ring(coords) -> np.ndarray:
     """(n, 2) array without the closing duplicate vertex."""
     a = np.asarray(coords, dtype=np.float64)[:, :2]
-    if len(a) > 1 and np.allclose(a[0], a[-1]):
+    if len(a) > 1 and same_point(a[0], a[-1]):
         a = a[:-1]
     return a
 
@@ -181,6 +191,30 @@ def _drop_repeats(r: np.ndarray, closed: bool) -> np.ndarray:
     return r
 
 
+def drop_spikes(r: np.ndarray, cos_limit: float = -0.9995) -> np.ndarray:
+    """Remove vertices where a closed ring folds back on itself (a zero-width spike).
+
+    After snapping, a ring that ran along a submesh edge for a tiny distance (the outline and the end
+    of a structured channel on the same line, to rounding) can go past a node and come straight back:
+    A -> B -> A' with B -> A' reversing A -> B. No triangle can lie along such an edge, so the vertex B
+    is removed; repeated until none is left.
+    """
+    r = np.asarray(r, dtype=np.float64)
+    for _ in range(len(r)):
+        if len(r) < 4:
+            return r
+        v_in = r - np.roll(r, 1, axis=0)
+        v_out = np.roll(r, -1, axis=0) - r
+        n_in = np.hypot(v_in[:, 0], v_in[:, 1])
+        n_out = np.hypot(v_out[:, 0], v_out[:, 1])
+        cos = np.einsum("ij,ij->i", v_in, v_out) / np.maximum(n_in * n_out, 1e-300)
+        bad = np.flatnonzero(cos < cos_limit)
+        if bad.size == 0:
+            return r
+        r = _drop_repeats(np.delete(r, bad[:1], axis=0), True)
+    return r
+
+
 def snap_rings_to_nodes(rings: Sequence[np.ndarray], nodes: np.ndarray, tol: float,
                         segments=None, on_tol: float = 0.0) -> List[np.ndarray]:
     """Move ring vertices within ``tol`` of a node onto it; drop repeated vertices.
@@ -194,7 +228,7 @@ def snap_rings_to_nodes(rings: Sequence[np.ndarray], nodes: np.ndarray, tol: flo
     nodes = np.asarray(nodes, dtype=np.float64).reshape(-1, 2)
     out: List[np.ndarray] = []
     for ring in rings:
-        r = _drop_repeats(_snap_vertices(as_ring(ring), nodes, tol, segments, on_tol), True)
+        r = drop_spikes(_drop_repeats(_snap_vertices(as_ring(ring), nodes, tol, segments, on_tol), True))
         if len(r) >= 3 and abs(ring_area(r)) > 0:
             out.append(r)
     return out

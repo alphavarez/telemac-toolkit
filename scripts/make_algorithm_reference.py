@@ -1,4 +1,6 @@
-"""Write docs/guide/09-processing-reference.md from the algorithms themselves (names, help, parameters).
+"""Write docs/guide/09-processing-reference.md (English) and docs/guia/09-referencia-procesos.md (Spanish)
+from the algorithms themselves (names, help, parameters). The help texts and parameter names are the ones QGIS
+shows, in English, in both pages; the headings, introduction and table headers are translated.
 
     QT_QPA_PLATFORM=offscreen <qgis-python> scripts/make_algorithm_reference.py
 """
@@ -40,7 +42,49 @@ def help_markdown(text):
     return md[1:] + [""] if md and md[0] == "" else md + [""]
 
 
-def default_text(p):
+KIND_ES = {
+    "file": "archivo", "crs": "SRC", "enum": "opción", "boolean": "sí/no", "number": "número", "string": "texto",
+    "source": "capa vectorial", "sink": "capa de salida", "fileDestination": "archivo de salida",
+    "multilayer": "capas", "field": "campo", "point": "punto",
+}
+
+TEXT = {
+    "en": {
+        "kind": KIND, "yes": "yes", "no": "no", "example": "(example text)", "choice": "choice: ",
+        "optional": "optional", "advanced": "advanced",
+        "header": ["Parameter", "Key", "Type", "Default"],
+        "results": "Results (group SELAFIN)", "mesh": "Mesh (group Mesh)",
+        "title": "# 9. Processing tools reference",
+        "intro": ("Every tool of the plugin is in the Processing toolbox under **TELEMAC Toolkit**, so it can run in "
+                  "batch mode, in the Model Designer or from Python (`processing.run(\"telemactoolkit:<id>\", {...})`). "
+                  "This page is generated from the tools themselves (`scripts/make_algorithm_reference.py`)."),
+        "id": "Id",
+        "footer": ("[← Formats, coordinates and boundary conditions](08-formats-coordinates-boundaries.md) · "
+                   "[Contents](README.md) · [Next: Scripting with Python →](10-python.md)"),
+        "out": ("docs", "guide", "09-processing-reference.md"),
+    },
+    "es": {
+        "kind": KIND_ES, "yes": "sí", "no": "no", "example": "(texto de ejemplo)", "choice": "opción: ",
+        "optional": "opcional", "advanced": "avanzado",
+        "header": ["Parámetro", "Clave", "Tipo", "Valor por defecto"],
+        "results": "Resultados (grupo SELAFIN)", "mesh": "Malla (grupo Mesh)",
+        "title": "# 9. Referencia de las herramientas de Procesos",
+        "intro": ("Todas las herramientas del plugin están en la caja de herramientas de Procesos, bajo **TELEMAC "
+                  "Toolkit**, así que se pueden ejecutar por lotes, en el Diseñador de modelos o desde Python "
+                  "(`processing.run(\"telemactoolkit:<id>\", {...})`). Esta página se genera a partir de las propias "
+                  "herramientas (`scripts/make_algorithm_reference.py`). **Los nombres de las herramientas, sus "
+                  "textos de ayuda y los nombres de los parámetros están en inglés, tal como los muestra QGIS**, "
+                  "para que los encuentres igual en pantalla; los títulos, las columnas y los tipos están en "
+                  "español. La explicación de cada función está en las páginas de esta guía."),
+        "id": "Id",
+        "footer": ("[← Formatos, coordenadas y condiciones de frontera](08-formatos-coordenadas-fronteras.md) · "
+                   "[Contenido](README.md) · [Siguiente: Scripts con Python →](10-python.md)"),
+        "out": ("docs", "guia", "09-referencia-procesos.md"),
+    },
+}
+
+
+def default_text(p, t):
     d = p.defaultValue()
     if d is None or d == "":
         return ""
@@ -51,9 +95,9 @@ def default_text(p):
         except Exception:
             return str(d)
     if p.type() == "boolean":
-        return "yes" if d else "no"
+        return t["yes"] if d else t["no"]
     if isinstance(d, str) and "\n" in d:
-        return "(example text)"
+        return t["example"]
     return str(d)
 
 
@@ -70,35 +114,32 @@ def main():
     groups = {}
     for alg in prov.algorithms():
         groups.setdefault(alg.group(), []).append(alg)
-    out = ["# 9. Processing tools reference", "",
-           "Every tool of the plugin is in the Processing toolbox under **TELEMAC Toolkit**, so it can run in batch "
-           "mode, in the Model Designer or from Python (`processing.run(\"telemactoolkit:<id>\", {...})`). This page "
-           "is generated from the tools themselves (`scripts/make_algorithm_reference.py`).", ""]
     order = ["SELAFIN", "Mesh"]
-    for g in sorted(groups, key=lambda k: order.index(k) if k in order else 9):
-        out += ["## %s" % ("Results (group SELAFIN)" if g == "SELAFIN" else "Mesh (group Mesh)"), ""]
-        for alg in sorted(groups[g], key=lambda a: a.displayName()):
-            out += ["### %s" % alg.displayName(), "", "Id: `telemactoolkit:%s`" % alg.name(), ""]
-            help_ = alg.shortHelpString().strip()
-            if help_:
-                out += help_markdown(help_)
-            out += ["| Parameter | Key | Type | Default |", "| --- | --- | --- | --- |"]
-            for p in alg.parameterDefinitions():
-                adv = " *(advanced)*" if p.flags() & Qgis.ProcessingParameterFlag.Advanced else ""
-                opt = " *(optional)*" if p.flags() & Qgis.ProcessingParameterFlag.Optional else ""
-                kind = KIND.get(p.type(), p.type())
-                if p.type() == "enum":
-                    kind = "choice: " + "; ".join(p.options())
-                desc = p.description().replace("|", "/")
-                out.append("| %s%s%s | `%s` | %s | %s |" % (desc, opt, adv, p.name(), kind.replace("|", "/"),
-                                                            default_text(p).replace("|", "/")))
-            out.append("")
-    path = os.path.join(ROOT, "docs", "guide", "09-processing-reference.md")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write("\n".join(out) + "\n[← Formats, coordinates and boundary conditions](08-formats-coordinates-boundaries.md) · "
-                "[Contents](README.md) · [Next: Scripting with Python →](10-python.md)\n")
-    print("wrote", path, sum(len(v) for v in groups.values()), "tools")
+    for lang, t in TEXT.items():
+        out = [t["title"], "", t["intro"], ""]
+        for g in sorted(groups, key=lambda k: order.index(k) if k in order else 9):
+            out += ["## %s" % (t["results"] if g == "SELAFIN" else t["mesh"]), ""]
+            for alg in sorted(groups[g], key=lambda a: a.displayName()):
+                out += ["### %s" % alg.displayName(), "", "%s: `telemactoolkit:%s`" % (t["id"], alg.name()), ""]
+                help_ = alg.shortHelpString().strip()
+                if help_:
+                    out += help_markdown(help_)
+                out += ["| %s | %s | %s | %s |" % tuple(t["header"]), "| --- | --- | --- | --- |"]
+                for p in alg.parameterDefinitions():
+                    adv = " *(%s)*" % t["advanced"] if p.flags() & Qgis.ProcessingParameterFlag.Advanced else ""
+                    opt = " *(%s)*" % t["optional"] if p.flags() & Qgis.ProcessingParameterFlag.Optional else ""
+                    kind = t["kind"].get(p.type(), p.type())
+                    if p.type() == "enum":
+                        kind = t["choice"] + "; ".join(p.options())
+                    desc = p.description().replace("|", "/")
+                    out.append("| %s%s%s | `%s` | %s | %s |" % (desc, opt, adv, p.name(), kind.replace("|", "/"),
+                                                                default_text(p, t).replace("|", "/")))
+                out.append("")
+        path = os.path.join(ROOT, *t["out"])
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(out) + "\n" + t["footer"] + "\n")
+        print("wrote", path, sum(len(v) for v in groups.values()), "tools")
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ nearest node that has a value, so the geometry file never holds gaps.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Optional, Sequence
+from typing import Tuple, Callable, Optional, Sequence
 
 import numpy as np
 
@@ -193,8 +193,9 @@ _FUNCS = {
 _CONSTS = {"pi": np.pi, "e": np.e}
 
 
-#: variables of a bottom formula: map coordinates, and channel coordinates along an axis line
-FORMULA_VARIABLES = ("x", "y", "s", "n")
+#: variables of a bottom formula: map coordinates, channel coordinates along an axis line, and half the channel's
+#: width at s (from the project's width profile)
+FORMULA_VARIABLES = ("x", "y", "s", "n", "b")
 
 
 def formula_names(text: str) -> set:
@@ -283,23 +284,29 @@ class FormulaSource:
     formula: str
     name: str = "formula"
     axis: Optional[np.ndarray] = None
+    half_width: Optional[Tuple[np.ndarray, np.ndarray]] = None  # (s, b): half the channel width along the axis
 
     def __post_init__(self):
         self._tree = _check_formula(self.formula)
         self.uses = formula_names(self.formula)
-        if self.uses & {"s", "n"} and (self.axis is None or len(self.axis) < 2):
-            raise ValueError("the formula uses s or n (channel coordinates) but no channel axis line is given")
+        if self.uses & {"s", "n", "b"} and (self.axis is None or len(self.axis) < 2):
+            raise ValueError("the formula uses s, n or b (channel coordinates) but no channel axis line is given")
+        if "b" in self.uses and self.half_width is None:
+            raise ValueError("the formula uses b (half the channel width) but the project has no width profile")
 
     def sample(self, px, py) -> np.ndarray:
         px = np.asarray(px, dtype=np.float64)
         py = np.asarray(py, dtype=np.float64)
         env = {"x": px, "y": py}
-        if self.uses & {"s", "n"}:
+        if self.uses & {"s", "n", "b"}:
             from .planform import axis_coordinates
 
             sv, nv = axis_coordinates(self.axis, px, py)
             env["s"] = sv.reshape(px.shape)
             env["n"] = nv.reshape(px.shape)
+            if "b" in self.uses:
+                sw, bw = self.half_width
+                env["b"] = np.interp(sv, sw, bw).reshape(px.shape)
         env.update(_FUNCS)
         env.update(_CONSTS)
         with np.errstate(divide="ignore", invalid="ignore", over="ignore"):

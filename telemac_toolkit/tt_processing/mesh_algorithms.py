@@ -7,6 +7,7 @@ import os
 
 import numpy as np
 from qgis.core import (
+    QgsProcessingOutputNumber,
     Qgis,
     QgsCoordinateReferenceSystem,
     QgsFeature,
@@ -27,6 +28,7 @@ from qgis.core import (
     QgsProcessingParameterMultipleLayers,
     QgsProcessingParameterNumber,
     QgsProcessingParameterPoint,
+    QgsProcessingParameterRasterLayer,
     QgsProcessingParameterString,
     QgsProject,
     QgsVectorLayer,
@@ -54,6 +56,14 @@ MDAL_READABLE = (".slf", ".2dm", ".nc", ".mesh")
 FRAME_LABELS = ["Map coordinates as drawn", "Shift the lower-left corner to (0, 0)", "Shift a chosen point to (0, 0)"]
 
 _DOUBLE = Qgis.ProcessingNumberParameterType.Double
+#: meshing methods, in the order of the Method list (M.METHOD_KEYS)
+METHOD_KEYS = list(M.METHOD_KEYS)
+METHOD_LABELS = ["Balanced (built-in: regular nodes, smoothing)",
+                 "Quality-guaranteed (built-in: refine until every angle reaches the target)",
+                 "Gmsh Delaunay (fastest on large meshes)",
+                 "Gmsh Frontal-Delaunay (highest element quality)",
+                 "Gmsh MeshAdapt (most robust)",
+                 "Gmsh quadrilaterals (for programs that read them; TELEMAC gets two triangles each)"]
 _INT = Qgis.ProcessingNumberParameterType.Integer
 
 
@@ -152,6 +162,9 @@ class _MeshBase(_Base):
                                                                  _DOUBLE, 0.0)))
         self.addParameter(_advanced(QgsProcessingParameterBoolean(
             "STORE_OFFSET", self.tr("TELEMAC: store the shift in the file header, so QGIS still shows the mesh in place"), True)))
+        self.addParameter(_advanced(QgsProcessingParameterBoolean(
+            "DOUBLE", self.tr("TELEMAC: double precision (SERAFIND; the steering file then needs "
+                              "GEOMETRY FILE FORMAT = 'SERAFIND', which the steering file tool writes)"), False)))
 
     def _export_options(self, parameters, context, crs):
         fmt = FORMAT_KEYS[self.parameterAsEnum(parameters, "FORMAT", context)]
@@ -163,7 +176,8 @@ class _MeshBase(_Base):
         quads = self.parameterAsBoolean(parameters, "QUADS", context) if self.parameterDefinition("QUADS") else False
         return M.ExportOptions(fmt=fmt, quads=quads, frame=mode, frame_point=pt,
                                angle=self.parameterAsDouble(parameters, "FRAME_ANGLE", context),
-                               store_offset=self.parameterAsBoolean(parameters, "STORE_OFFSET", context))
+                               store_offset=self.parameterAsBoolean(parameters, "STORE_OFFSET", context),
+                               double=bool(self.parameterDefinition("DOUBLE") and self.parameterAsBoolean(parameters, "DOUBLE", context)))
 
 
 # --------------------------------------------------------------------------
@@ -220,16 +234,29 @@ class CreateMeshProjectAlgorithm(_MeshBase):
 
 
 # --------------------------------------------------------------------------
+_EXAMPLE_SEGMENTS = """# an S-shaped flume widening downstream (one segment per line)
+straight 3
+bend left 2 90
+straight 1
+bend right 2 90
+taper 1.5 2
+straight 4"""
+
+
 class ChannelTemplateAlgorithm(_MeshBase):
-    SECTIONS = ["Rectangular (flat bed)", "Trapezoidal"]
-    PLANFORMS = ["Straight", "Bend (straight inlet, circular bend, straight outlet)", "Meanders (sine-generated)"]
+    SECTIONS = ["Rectangular (flat bed)", "Trapezoidal", "Compound (main channel and floodplains)", "V-shaped", "Parabolic",
+                "Asymmetric trapezoid", "Custom formula of n and b"]
+    PLANFORMS = ["Straight", "Bend (straight inlet, circular bend, straight outlet)", "Meanders (sine-generated)",
+                 "Composed from segments (text below)", "Centreline from a line layer", "Imported file (TXT, CSV or DXF)"]
     TURNS = ["Left (counter-clockwise)", "Right (clockwise)"]
+    IMPORT_AS = ["Centreline (the longest line; a third column gives widths)",
+                 "Outline (the largest closed line is the domain, closed lines inside it islands, open lines breaklines)"]
 
     def name(self):
         return "channeltemplate"
 
     def displayName(self):
-        return self.tr("Channel or flume template (straight, bend, meanders)")
+        return self.tr("Channel or flume template (straight, bend, meanders, composed, drawn, imported)")
 
     def shortHelpString(self):
         return self.tr(
@@ -250,7 +277,24 @@ class ChannelTemplateAlgorithm(_MeshBase):
             "of x and y for a straight channel, of the channel coordinates s (along the axis) and n (across it, "
             "left positive) otherwise, with a bed level at the inlet, a slope along the axis and a rectangular or "
             "trapezoidal section. Generate mesh applies it. Leave the project empty to create one in local "
-            "coordinates.")
+            "coordinates.\n\n"
+            "• Composed from segments: any channel built from a text, one segment per line: width W, straight L, "
+            "bend left|right R ANGLE, elbow left|right ANGLE (a sharp corner), meanders WAVELENGTH THETA0 COUNT, "
+            "kinoshita WAVELENGTH THETA0 COUNT JS JF, taper WIDTH LENGTH (gradual width change), expand WIDTH (sudden "
+            "expansion or contraction), slope S, drop D (a step in the bed), bed Z, and section KIND ... (the "
+            "cross-section from there on: rect; trapezoid BOTTOM_WIDTH SIDE_SLOPE BANK_HEIGHT [OFFSET]; compound "
+            "MAIN_WIDTH SIDE_SLOPE FLOODPLAIN_HEIGHT FLOODPLAIN_SLOPE [OFFSET]; v DEPTH [OFFSET]; parabolic DEPTH "
+            "[OFFSET]; asym BOTTOM_WIDTH LEFT_SLOPE RIGHT_SLOPE BANK_HEIGHT [OFFSET]; custom FORMULA of n and b). "
+            "Pieces between sudden width changes and sharp corners get their own structured strips; the corners and "
+            "steps get triangles.\n"
+            "• Centreline from a line layer: a line you draw (in local coordinates for a flume), with a constant "
+            "width or a width field; corners sharper than the corner angle become elbows.\n"
+            "• Imported file: TXT or CSV (x y [width] per line; a line without numbers starts a new polyline) or "
+            "DXF, read as a centreline or as an outline (a basin or any shape: the largest closed line is the domain).\n\n"
+            "Cross-sections (n across the axis, left positive; b half the local width): rectangular; trapezoidal; "
+            "compound (a main channel and floodplains at a height, optionally rising towards the walls); V-shaped and "
+            "parabolic (depth at the axis); asymmetric trapezoid (different side slopes); or any formula of n and b. "
+            "The offset moves the main channel to the left (+) or right (-) of the axis.")
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFile("PROJECT", self.tr("Mesh project (empty = create one)"), extension="gpkg", optional=True))
@@ -279,6 +323,31 @@ class ChannelTemplateAlgorithm(_MeshBase):
         self.addParameter(QgsProcessingParameterNumber("BOTTOM_WIDTH", self.tr("Trapezoid: bottom width (m)"), _DOUBLE, 0.5, minValue=0.0))
         self.addParameter(QgsProcessingParameterNumber("SIDE_SLOPE", self.tr("Trapezoid: side slope (horizontal per 1 vertical)"), _DOUBLE, 1.0, minValue=0.0))
         self.addParameter(QgsProcessingParameterNumber("BANK_HEIGHT", self.tr("Trapezoid: bank height (m)"), _DOUBLE, 0.2, minValue=0.0))
+        self.addParameter(QgsProcessingParameterString("SEGMENTS", self.tr("Composed: segments, one per line"), _EXAMPLE_SEGMENTS,
+                                                       multiLine=True, optional=True))
+        self.addParameter(QgsProcessingParameterFeatureSource("CENTRELINE", self.tr("Centreline: line layer (local coordinates "
+                                                                                    "for a flume)"),
+                                                              [Qgis.ProcessingSourceType.VectorLine], optional=True))
+        self.addParameter(QgsProcessingParameterField("WIDTH_FIELD", self.tr("Centreline: width field (optional; one width per "
+                                                                             "line)"), parentLayerParameterName="CENTRELINE",
+                                                      type=Qgis.ProcessingFieldParameterDataType.Numeric, optional=True))
+        self.addParameter(QgsProcessingParameterFile("IMPORT_FILE", self.tr("Imported file (TXT, CSV or DXF)"), optional=True,
+                                                     fileFilter="Shapes (*.txt *.csv *.xyz *.dxf);;All files (*)"))
+        self.addParameter(QgsProcessingParameterEnum("IMPORT_AS", self.tr("Imported file: read as"), [self.tr(t) for t in self.IMPORT_AS],
+                                                     defaultValue=0))
+        self.addParameter(_advanced(QgsProcessingParameterNumber("CORNER", self.tr("Drawn or imported: corners sharper than this are "
+                                                                                    "elbows (degrees)"), _DOUBLE, 30.0, minValue=1.0,
+                                                                 maxValue=179.0)))
+        self.addParameter(_advanced(QgsProcessingParameterNumber("FLOODPLAIN_SLOPE", self.tr("Compound: floodplain rise towards the "
+                                                                                              "walls (m/m)"), _DOUBLE, 0.0)))
+        self.addParameter(_advanced(QgsProcessingParameterNumber("RIGHT_SLOPE", self.tr("Asymmetric: right side slope (horizontal "
+                                                                                         "per 1 vertical; the left one is the "
+                                                                                         "side slope)"), _DOUBLE, 2.0, minValue=0.0)))
+        self.addParameter(_advanced(QgsProcessingParameterNumber("SECTION_OFFSET", self.tr("Main channel offset from the axis (m, "
+                                                                                            "left positive)"), _DOUBLE, 0.0)))
+        self.addParameter(_advanced(QgsProcessingParameterString("SECTION_FORMULA", self.tr("Custom section: formula of n and b "
+                                                                                             "(height above the axis bed)"),
+                                                                 "0.1*(n/b)**2", optional=True)))
         self.addParameter(QgsProcessingParameterNumber("Q", self.tr("Inflow (m³/s, optional)"), _DOUBLE, optional=True))
         self.addParameter(QgsProcessingParameterNumber("H", self.tr("Outlet water level (m, optional)"), _DOUBLE, optional=True))
 
@@ -296,9 +365,14 @@ class ChannelTemplateAlgorithm(_MeshBase):
                 raise QgsProcessingException(self.tr("Give a mesh project or a file name for a new one."))
             if os.path.exists(path):
                 raise QgsProcessingException(self.tr("%s already exists.") % path)
-            layers = M.create_mesh_project(path, M.local_crs(), project=context.project())
+            new_crs = M.local_crs()
+            src = self.parameterAsSource(parameters, "CENTRELINE", context) \
+                if self.parameterAsEnum(parameters, "PLANFORM", context) == 4 else None
+            if src is not None and src.sourceCrs().isValid():
+                new_crs = src.sourceCrs()  # a drawn centreline stays where it is drawn
+            layers = M.create_mesh_project(path, new_crs, project=context.project())
             if context.project() is not None and not context.project().crs().isValid():
-                context.project().setCrs(M.local_crs())
+                context.project().setCrs(new_crs)
         else:
             layers = M.open_mesh_project(path)
         crs = layers["domain"].crs()
@@ -315,13 +389,17 @@ class ChannelTemplateAlgorithm(_MeshBase):
         q = None if q in (None, "") else float(q)
         h = None if h in (None, "") else float(h)
         structured = self.parameterAsBoolean(parameters, "STRUCTURED", context)
-        trap = self.parameterAsEnum(parameters, "SECTION", context) == 1
+        sec_kind = self.parameterAsEnum(parameters, "SECTION", context)
+        trap = sec_kind == 1
         z0 = self.parameterAsDouble(parameters, "BED_Z0", context)
         S = self.parameterAsDouble(parameters, "SLOPE", context)
         bw = self.parameterAsDouble(parameters, "BOTTOM_WIDTH", context) if trap else 0.0
         ss = self.parameterAsDouble(parameters, "SIDE_SLOPE", context) if trap else 0.0
         hb = self.parameterAsDouble(parameters, "BANK_HEIGHT", context) if trap else 0.0
         settings = {"default_size": "%g" % cell}
+        if kind >= 3 or sec_kind >= 2:
+            return self._composed(parameters, context, feedback, path, layers, crs, kind, W, o, ang, cell, structured, q, h, z0, S,
+                                  settings)
         if kind == 0:
             L = self.parameterAsDouble(parameters, "LENGTH", context)
             rep = M.add_flume(layers, L, W, o, ang, cell, structured, q, h)
@@ -372,6 +450,292 @@ class ChannelTemplateAlgorithm(_MeshBase):
         M.refresh_project_layers(path, context.project())
         return {"OUTPUT": path, "BED_FORMULA": formula}
 
+    def _section(self, parameters, context):
+        from ..mesher.composer import Section
+
+        k = self.parameterAsEnum(parameters, "SECTION", context)
+        num = lambda key: self.parameterAsDouble(parameters, key, context)  # noqa: E731
+        off = num("SECTION_OFFSET")
+        if k == 1:
+            return Section("trapezoid", (num("BOTTOM_WIDTH"), num("SIDE_SLOPE"), num("BANK_HEIGHT"), off))
+        if k == 2:
+            return Section("compound", (num("BOTTOM_WIDTH"), num("SIDE_SLOPE"), num("BANK_HEIGHT"), num("FLOODPLAIN_SLOPE"), off))
+        if k == 3:
+            return Section("v", (num("BANK_HEIGHT"), off))
+        if k == 4:
+            return Section("parabolic", (num("BANK_HEIGHT"), off))
+        if k == 5:
+            return Section("asym", (num("BOTTOM_WIDTH"), num("SIDE_SLOPE"), num("RIGHT_SLOPE"), num("BANK_HEIGHT"), off))
+        if k == 6:
+            from ..mesher.interp import _check_formula
+
+            f = self.parameterAsString(parameters, "SECTION_FORMULA", context).strip() or "0"
+            try:
+                _check_formula(f)
+            except (ValueError, SyntaxError) as exc:
+                raise QgsProcessingException(self.tr("Custom section: %s") % exc)
+            return Section("custom", (), f)
+        return Section()
+
+    def _composed(self, parameters, context, feedback, path, layers, crs, kind, W, o, ang, cell, structured, q, h, z0, S, settings):
+        """Composed, drawn and imported channels, and the planforms of the first three kinds with the newer sections."""
+        from ..mesher import composer as C
+
+        sec = self._section(parameters, context)
+        corner = self.parameterAsDouble(parameters, "CORNER", context)
+        try:
+            if kind == 0:
+                comp = C.compose("straight %r" % self.parameterAsDouble(parameters, "LENGTH", context), W, cell, z0, S, sec)
+            elif kind == 1:
+                turn = "left" if self.parameterAsEnum(parameters, "TURN", context) == 0 else "right"
+                comp = C.compose("straight %r; bend %s %r %r; straight %r" % (
+                    self.parameterAsDouble(parameters, "INLET", context), turn, self.parameterAsDouble(parameters, "RADIUS", context),
+                    self.parameterAsDouble(parameters, "BEND_ANGLE", context), self.parameterAsDouble(parameters, "OUTLET", context)),
+                    W, cell, z0, S, sec)
+            elif kind == 2:
+                comp = C.compose("straight %r; meanders %r %r %r; straight %r" % (
+                    self.parameterAsDouble(parameters, "INLET", context), self.parameterAsDouble(parameters, "WAVELENGTH", context),
+                    self.parameterAsDouble(parameters, "DEFLECTION", context), self.parameterAsDouble(parameters, "COUNT", context),
+                    self.parameterAsDouble(parameters, "OUTLET", context)), W, cell, z0, S, sec)
+            elif kind == 3:
+                comp = C.compose(self.parameterAsString(parameters, "SEGMENTS", context), W, cell, z0, S, sec)
+            elif kind == 4:
+                src = self.parameterAsSource(parameters, "CENTRELINE", context)
+                if src is None:
+                    raise QgsProcessingException(self.tr("Give the centreline layer."))
+                items = M.line_arrays_with(src, crs, context.project(), self.parameterAsString(parameters, "WIDTH_FIELD", context) or None)
+                if not items:
+                    raise QgsProcessingException(self.tr("The centreline layer has no line."))
+                line, wv = max(items, key=lambda it: len(it[0]))
+                comp = C.from_centreline(line, cell, wv if wv and wv > 0 else W, None, corner, z0, S, sec)
+                o, ang = (0.0, 0.0), 0.0  # drawn where it is
+            else:
+                fpath = self.parameterAsFile(parameters, "IMPORT_FILE", context)
+                if not fpath or not os.path.exists(fpath):
+                    raise QgsProcessingException(self.tr("Give the file to import."))
+                closed, open_ = M.read_shape_file(fpath)
+                if self.parameterAsEnum(parameters, "IMPORT_AS", context) == 1:
+                    rep = M.add_outline(layers, [c[:, :2] for c in closed], [c[:, :2] for c in open_], cell)
+                    xmin = min(float(c[:, 0].min()) for c in closed)
+                    formula = "%g - %g*(x - %g)" % (z0, S, xmin) if S else "%g" % z0
+                    settings.update(bottom_formula=formula, bottom_axis="", bottom_halfwidth="")
+                    return self._finish(path, settings, rep, formula, feedback, context)
+                lines = open_ + closed
+                line = max(lines, key=len)
+                widths = line[:, 2] if line.shape[1] > 2 and np.all(np.isfinite(line[:, 2])) else None
+                comp = C.from_centreline(line[:, :2], cell, W, widths, corner, z0, S, sec)
+                o, ang = (0.0, 0.0), 0.0
+        except ValueError as exc:
+            raise QgsProcessingException(str(exc))
+        if kind == 0:  # a straight flume's origin is its inlet corner; the axis starts mid-inlet
+            a = math.radians(ang)
+            o = (o[0] - 0.5 * W * math.sin(a), o[1] + 0.5 * W * math.cos(a))
+        if kind <= 3:
+            comp = comp.transformed(o, ang)
+        rep = M.add_composition(layers, comp, cell, structured, q, h, name="flume")
+        settings.update(bottom_formula=comp.formula, bottom_axis="flume_axis",
+                        bottom_halfwidth=M.profile_text(*comp.half_width))
+        feedback.pushInfo(self.tr("Axis length %.4g m") % comp.length)
+        return self._finish(path, settings, rep, comp.formula, feedback, context)
+
+    def _finish(self, path, settings, rep, formula, feedback, context):
+        M.write_settings(path, settings)
+        for r in rep:
+            if r.startswith("Warning: "):
+                feedback.reportError(r[9:], fatalError=False)
+            else:
+                feedback.pushInfo(r)
+        feedback.pushInfo(self.tr("Bed formula saved in the project: z = %s") % formula)
+        M.refresh_project_layers(path, context.project())
+        return {"OUTPUT": path, "BED_FORMULA": formula}
+
+
+class RiverReachAlgorithm(_MeshBase):
+    SOURCES = ["Centreline", "Two bank lines"]
+    WIDTHS = ["Constant width", "From the DEM (bankfull depth)"]
+    DOMAINS = ["Create it: the reach plus a floodplain on each side", "Keep the domain of the project"]
+    SPANS_IN = ["The channel only", "The whole end of the domain"]
+    SPANS_OUT = ["The whole end of the domain", "The channel only"]
+
+    def name(self):
+        return "riverreach"
+
+    def displayName(self):
+        return self.tr("River reach or network from centrelines or bank lines")
+
+    def shortHelpString(self):
+        return self.tr(
+            "Draws a natural river in a mesh project, ready for Generate mesh: the left bank, right bank and axis "
+            "of a structured channel strip with matched cross-sections normal to the flow, the domain (or the "
+            "project's own), and inflow (Q) and outflow (H) lines where the river meets the domain outline.\n\n"
+            "Banks:\n"
+            "• Centreline and a constant width.\n"
+            "• Centreline and a DEM: at every cross-section the terrain across the river is read, the bed found "
+            "near the centreline, and each bank put where the terrain first rises the bankfull depth above the bed "
+            "(searched up to the largest width). The widths are smoothed along the river and the axis moved midway "
+            "between the banks.\n"
+            "• Two bank lines (one layer with two lines, in any order and direction).\n\n"
+            "With a DEM the river is turned to run downstream, from the higher bed to the lower one; without one, "
+            "draw the centreline downstream. Jagged lines are smoothed over the smoothing length (default: the "
+            "width) and, in tight bends, the cross-sections are turned until they no longer cross; any that still "
+            "cross are reported.\n\n"
+            "Boundaries: the inflow covers the channel and the outflow the whole downstream end of the domain by "
+            "default (water on the floodplain can leave). The lines stop short of their ends, so the bank and "
+            "corner nodes stay walls. Values are optional; set them later in the boundary layer or the .liq file.\n\n"
+            "River networks: give several centrelines, each tributary ending on the river it joins (or lines meeting "
+            "end to end at a bifurcation). Every reach between junctions gets its own strip, stopped short of the "
+            "junction; the channel area at the junction is meshed with triangles of the strips' size, with its banks "
+            "as guide lines, so confluences keep their corners. Free upstream ends get inflow lines, downstream ends "
+            "outflow lines (lines must run downstream, or be turned by the DEM). An optional width field gives each "
+            "line its own constant width.\n\n"
+            "Nodes across follow the width (default): where the river widens or narrows the number of nodes across "
+            "changes by one row of triangles at a time, so the spacing across stays near the spacing along. In tight "
+            "bends only the cross-sections there are turned, until none cross and no inner-bank cell is shorter than "
+            "the spacing over the largest ratio; the others stay normal to the flow.")
+
+    def initAlgorithm(self, config=None):
+        self.addParameter(QgsProcessingParameterFile("PROJECT", self.tr("Mesh project (empty = create one)"), extension="gpkg", optional=True))
+        self.addParameter(QgsProcessingParameterFileDestination("NEW_PROJECT", self.tr("New mesh project (when none is given)"),
+                                                                GPKG_FILTER, optional=True, createByDefault=False))
+        self.addParameter(QgsProcessingParameterEnum("SOURCE", self.tr("River given as"), [self.tr(t) for t in self.SOURCES], defaultValue=0))
+        self.addParameter(QgsProcessingParameterFeatureSource("CENTRELINE", self.tr("Centreline(s) (line layer; several lines make a "
+                                                                                    "network; selected features if any)"),
+                                                              [Qgis.ProcessingSourceType.VectorLine], optional=True))
+        self.addParameter(QgsProcessingParameterField("WIDTH_FIELD", self.tr("Width field of the centrelines (one constant width "
+                                                                             "per line, optional)"),
+                                                      parentLayerParameterName="CENTRELINE", type=Qgis.ProcessingFieldParameterDataType.Numeric,
+                                                      optional=True))
+        self.addParameter(QgsProcessingParameterFeatureSource("BANKS", self.tr("Bank lines (line layer with the two banks)"),
+                                                              [Qgis.ProcessingSourceType.VectorLine], optional=True))
+        self.addParameter(QgsProcessingParameterEnum("WIDTH_MODE", self.tr("Width (centreline)"), [self.tr(t) for t in self.WIDTHS], defaultValue=0))
+        self.addParameter(QgsProcessingParameterNumber("WIDTH", self.tr("Constant width (m)"), _DOUBLE, 20.0, minValue=1e-6))
+        self.addParameter(QgsProcessingParameterRasterLayer("DEM", self.tr("DEM (banks from the terrain, downstream direction)"), optional=True))
+        self.addParameter(QgsProcessingParameterNumber("BANKFULL_DEPTH", self.tr("Bankfull depth above the bed (m)"), _DOUBLE, 1.5, minValue=1e-6))
+        self.addParameter(QgsProcessingParameterNumber("MAX_WIDTH", self.tr("Largest width to search in the DEM (m)"), _DOUBLE, 100.0, minValue=1e-6))
+        self.addParameter(_advanced(QgsProcessingParameterNumber("MIN_WIDTH", self.tr("Smallest width (m)"), _DOUBLE, 0.0, minValue=0.0)))
+        self.addParameter(QgsProcessingParameterNumber("SPACING", self.tr("Cross-section spacing along the river (m)"), _DOUBLE, 10.0, minValue=1e-6))
+        self.addParameter(QgsProcessingParameterNumber("NODES_ACROSS", self.tr("Nodes across the channel (0 = width / spacing, odd)"),
+                                                       _INT, 0, minValue=0))
+        self.addParameter(QgsProcessingParameterBoolean("VARY_ACROSS", self.tr("Nodes across follow the width (when 0 above)"), True))
+        self.addParameter(_advanced(QgsProcessingParameterNumber(
+            "MAX_RATIO", self.tr("Bends: inner-bank cells at least the spacing divided by"), _DOUBLE, 4.0, minValue=1.0)))
+        self.addParameter(_advanced(QgsProcessingParameterNumber("SMOOTHING", self.tr("Smoothing length of the centreline (m, 0 = the width)"),
+                                                                 _DOUBLE, 0.0, minValue=0.0)))
+        self.addParameter(QgsProcessingParameterEnum("DOMAIN_MODE", self.tr("Domain"), [self.tr(t) for t in self.DOMAINS], defaultValue=0))
+        self.addParameter(QgsProcessingParameterNumber("FLOODPLAIN", self.tr("Floodplain width on each side (m)"), _DOUBLE, 200.0, minValue=0.0))
+        self.addParameter(QgsProcessingParameterNumber("FLOODPLAIN_SIZE", self.tr("Element size on the floodplain (m, 0 = default size)"),
+                                                       _DOUBLE, 0.0, minValue=0.0))
+        self.addParameter(QgsProcessingParameterBoolean("BOUNDARIES", self.tr("Add inflow and outflow lines"), True))
+        self.addParameter(QgsProcessingParameterEnum("INFLOW_SPAN", self.tr("Inflow (Q) covers"), [self.tr(t) for t in self.SPANS_IN], defaultValue=0))
+        self.addParameter(QgsProcessingParameterEnum("OUTFLOW_SPAN", self.tr("Outflow (H) covers"), [self.tr(t) for t in self.SPANS_OUT], defaultValue=0))
+        self.addParameter(QgsProcessingParameterNumber("Q", self.tr("Inflow (m³/s, optional)"), _DOUBLE, optional=True))
+        self.addParameter(QgsProcessingParameterNumber("H", self.tr("Outflow water level (m, optional)"), _DOUBLE, optional=True))
+        self.addParameter(QgsProcessingParameterString("NAME", self.tr("Channel name"), "river"))
+
+    def flags(self):
+        return super().flags() | Qgis.ProcessingAlgorithmFlag.NoThreading
+
+    def processAlgorithm(self, parameters, context, feedback):
+        from ..mesher import river as RV
+
+        from_banks = self.parameterAsEnum(parameters, "SOURCE", context) == 1
+        src = self.parameterAsSource(parameters, "BANKS" if from_banks else "CENTRELINE", context)
+        if src is None:
+            raise QgsProcessingException(self.tr("Give the bank lines.") if from_banks else self.tr("Give the centreline."))
+        path = self.parameterAsFile(parameters, "PROJECT", context)
+        if not path:
+            path = self.parameterAsFileOutput(parameters, "NEW_PROJECT", context)
+            if not path:
+                raise QgsProcessingException(self.tr("Give a mesh project or a file name for a new one."))
+            if os.path.exists(path):
+                raise QgsProcessingException(self.tr("%s already exists.") % path)
+            layers = M.create_mesh_project(path, src.sourceCrs(), project=context.project())
+        else:
+            layers = M.open_mesh_project(path)
+        crs = layers["domain"].crs()
+        wfield = "" if from_banks else self.parameterAsString(parameters, "WIDTH_FIELD", context)
+        items = M.line_arrays_with(src, crs, context.project(), wfield or None)
+        lines = [c for c, _v in items]
+        dem_layer = self.parameterAsRasterLayer(parameters, "DEM", context)
+        dem = None
+        if dem_layer is not None:
+            sampler = M.RasterSampler(dem_layer, 1, crs, project=context.project())
+            dem = sampler.sample
+        step = self.parameterAsDouble(parameters, "SPACING", context)
+        sm = self.parameterAsDouble(parameters, "SMOOTHING", context) or None
+        ratio = self.parameterAsDouble(parameters, "MAX_RATIO", context) or 4.0
+        vary = self.parameterAsBoolean(parameters, "VARY_ACROSS", context)
+        q = parameters.get("Q")
+        h = parameters.get("H")
+        common = dict(
+            boundaries=self.parameterAsBoolean(parameters, "BOUNDARIES", context),
+            inflow_span=("channel", "valley")[self.parameterAsEnum(parameters, "INFLOW_SPAN", context)],
+            outflow_span=("valley", "channel")[self.parameterAsEnum(parameters, "OUTFLOW_SPAN", context)],
+            inflow=None if q in (None, "") else float(q), outflow_level=None if h in (None, "") else float(h),
+            name=self.parameterAsString(parameters, "NAME", context).strip() or "river", vary_across=vary)
+        nodes = self.parameterAsInt(parameters, "NODES_ACROSS", context)
+        fp = self.parameterAsDouble(parameters, "FLOODPLAIN", context)
+        fp_size = self.parameterAsDouble(parameters, "FLOODPLAIN_SIZE", context) or None
+        try:
+            if from_banks:
+                if len(lines) != 2:
+                    raise QgsProcessingException(self.tr("The bank layer must hold exactly two lines (it has %d); select "
+                                                         "the two banks.") % len(lines))
+                reach = RV.reach_from_banks(lines[0], lines[1], step, dem=dem, smoothing=sm, max_ratio=ratio)
+            else:
+                if not lines:
+                    raise QgsProcessingException(self.tr("The centreline layer has no line."))
+                by_dem = self.parameterAsEnum(parameters, "WIDTH_MODE", context) == 1
+                if by_dem and dem is None:
+                    raise QgsProcessingException(self.tr("Banks from the DEM need a DEM."))
+                width = self.parameterAsDouble(parameters, "WIDTH", context)
+                widths = [v if v and v > 0 else (None if by_dem else width) for _c, v in items]
+                bankfull = self.parameterAsDouble(parameters, "BANKFULL_DEPTH", context)
+                max_w = self.parameterAsDouble(parameters, "MAX_WIDTH", context)
+                min_w = self.parameterAsDouble(parameters, "MIN_WIDTH", context)
+                if len(lines) > 1:
+                    if self.parameterAsEnum(parameters, "DOMAIN_MODE", context) == 1:
+                        raise QgsProcessingException(self.tr("A river network makes its own domain: choose 'Create it' for "
+                                                             "the domain, or draw the reaches one at a time."))
+                    from ..mesher import network as NW
+                    from ..mesher.river import _downstream
+
+                    if dem is not None:  # each line runs downstream
+                        for i, c in enumerate(lines):
+                            rev, z0, z1 = _downstream(RV.resample(c, step), dem)
+                            if rev:
+                                lines[i] = c[::-1].copy()
+                                feedback.pushInfo(self.tr("Line %d reversed to run downstream (bed %.3f m to %.3f m)") % (i + 1, z0, z1))
+                    net = NW.river_network(lines, step, widths, dem=dem, bankfull_depth=bankfull if by_dem else None,
+                                           max_width=max_w, min_width=min_w, smoothing=sm, max_ratio=ratio)
+                    rep = M.add_river_network(layers, net, step, nodes, fp, fp_size, **common)
+                    reach = None
+                else:
+                    reach = RV.reach_from_centreline(
+                        lines[0], step, width=widths[0], dem=dem,
+                        bankfull_depth=bankfull if widths[0] is None else None, max_width=max_w, min_width=min_w,
+                        smoothing=sm, max_ratio=ratio)
+            if reach is not None or from_banks:
+                rep = M.add_river(layers, reach, step, nodes, fp, fp_size,
+                                  use_domain=self.parameterAsEnum(parameters, "DOMAIN_MODE", context) == 1,
+                                  project=context.project(), **common)
+        except ValueError as exc:
+            raise QgsProcessingException(str(exc))
+        for r in rep:
+            if r.startswith("Warning: "):
+                feedback.reportError(r[9:], fatalError=False)
+            else:
+                feedback.pushInfo(r)
+        st = M.read_settings(path)
+        if not st.get("default_size"):
+            fp = self.parameterAsDouble(parameters, "FLOODPLAIN_SIZE", context)
+            M.write_settings(path, {"default_size": "%g" % (fp or 4 * step)})
+            feedback.pushInfo(self.tr("Default element size set to %g m (change it in step 1 of the panel)") % (fp or 4 * step))
+        if dem_layer is not None:
+            feedback.pushInfo(self.tr("Tick the DEM %s in step 3 of the panel so Generate mesh takes the bottom from it.") % dem_layer.name())
+        M.refresh_project_layers(path, context.project())
+        return {"OUTPUT": path}
+
 
 # --------------------------------------------------------------------------
 _INPUTS = [  # parameter, project layer key, label, geometry
@@ -393,6 +757,25 @@ _GEOM = {"polygon": Qgis.ProcessingSourceType.VectorPolygon, "line": Qgis.Proces
 class GenerateMeshAlgorithm(_MeshBase):
     def name(self):
         return "generatemesh"
+
+    def _free_output(self, out, context, feedback):
+        """A mesh file loaded in QGIS cannot be overwritten on Windows: remove its layer (on the main thread; the new
+        mesh is loaded instead), or write beside it."""
+        from qgis.PyQt.QtCore import QCoreApplication, QThread
+
+        if not M.layers_using([out], context.project()):
+            return out
+        app = QCoreApplication.instance()
+        if app is not None and QThread.currentThread() == app.thread():
+            names = M.free_output([out], context.project())
+            feedback.pushInfo(self.tr("Removed the layer(s) %s, which read %s, so it can be overwritten")
+                              % (", ".join(names), os.path.basename(out)))
+            return out
+        alt = M.free_name(out)
+        feedback.reportError(self.tr("%s is loaded in QGIS and cannot be overwritten: the mesh is written to %s. Remove "
+                                     "that layer to overwrite it next time.") % (os.path.basename(out), os.path.basename(alt)),
+                             fatalError=False)
+        return alt
 
     def displayName(self):
         return self.tr("Generate mesh")
@@ -420,6 +803,21 @@ class GenerateMeshAlgorithm(_MeshBase):
                                                        _DOUBLE, 0.0, minValue=0.0))
         self.addParameter(QgsProcessingParameterNumber("GROWTH", self.tr("Size growth rate"), _DOUBLE, 1.2, minValue=1.0, maxValue=3.0))
         self.addParameter(_advanced(QgsProcessingParameterNumber("SMOOTHING", self.tr("Smoothing iterations"), _INT, 8, minValue=0, maxValue=60)))
+        self.addParameter(_advanced(QgsProcessingParameterNumber(
+            "OUTLINE_TOLERANCE", self.tr("Follow the outline and lines within (m, 0 = 5% of the element size)"), _DOUBLE, 0.0,
+            minValue=0.0)))
+        self.addParameter(QgsProcessingParameterEnum("METHOD", self.tr("Method (Gmsh ones need the gmsh package)"),
+                                                     [self.tr(t) for t in METHOD_LABELS], defaultValue=0))
+        self.addParameter(QgsProcessingParameterNumber("MIN_ANGLE", self.tr("Quality-guaranteed: smallest angle (degrees, 20 to 30)"),
+                                                       _DOUBLE, 30.0, minValue=20.0, maxValue=30.0))
+        self.addParameter(QgsProcessingParameterNumber(
+            "TERRAIN_TOLERANCE", self.tr("Terrain refinement: bed tolerance (m, 0 = off; uses the first bottom raster)"),
+            _DOUBLE, 0.0, minValue=0.0))
+        self.addParameter(_advanced(QgsProcessingParameterNumber(
+            "TERRAIN_MIN_SIZE", self.tr("Terrain refinement: smallest element size (m, 0 = default size / 15)"), _DOUBLE, 0.0,
+            minValue=0.0)))
+        self.addParameter(_advanced(QgsProcessingParameterNumber(
+            "MAX_NODES", self.tr("Node limit (0 = no limit)"), _INT, 2000000, minValue=0, maxValue=2000000000)))
         self.addParameter(QgsProcessingParameterMultipleLayers("RASTERS", self.tr("Bottom: rasters (priority order)"),
                                                                Qgis.ProcessingSourceType.Raster, optional=True))
         self.addParameter(QgsProcessingParameterFeatureSource("POINTS", self.tr("Bottom: survey points"),
@@ -466,23 +864,41 @@ class GenerateMeshAlgorithm(_MeshBase):
         formula = self.parameterAsString(parameters, "FORMULA", context) or settings.get("bottom_formula", "")
         zf = self.parameterAsDouble(parameters, "Z_FACTOR", context)
         try:
-            axis = None
-            if formula_names(formula) & {"s", "n"}:
-                axis = M.channel_axis(layers, settings.get("bottom_axis", ""), crs, context.project())
+            axis = half = None
+            if formula_names(formula) & {"s", "n", "b"}:
+                axis, half = M.formula_axis(layers, settings, crs, context.project())
             sources = M.bottom_sources_from(self.parameterAsLayerList(parameters, "RASTERS", context) or [],
                                             self.parameterAsSource(parameters, "POINTS", context),
                                             self.parameterAsString(parameters, "POINT_FIELD", context), formula, zf, crs,
-                                            context.project(), axis)
+                                            context.project(), axis, half)
         except (ValueError, SyntaxError) as exc:
             raise QgsProcessingException(self.tr("Bottom: %s") % exc)
         fr = parameters.get("FRICTION")
+        method = METHOD_KEYS[self.parameterAsEnum(parameters, "METHOD", context)]
+        terrain = None
+        tol = self.parameterAsDouble(parameters, "TERRAIN_TOLERANCE", context)
+        if tol > 0:
+            rasters = self.parameterAsLayerList(parameters, "RASTERS", context) or []
+            if not rasters:
+                raise QgsProcessingException(self.tr("Terrain refinement needs a bottom raster (the first one of the list is used)."))
+            terrain = (M.RasterSampler(rasters[0], 1, crs, project=context.project()).sample, tol,
+                       self.parameterAsDouble(parameters, "TERRAIN_MIN_SIZE", context))
+        if method.startswith("gmsh_"):
+            from ..mesher import gmsh_engine
+
+            if not gmsh_engine.available():
+                raise QgsProcessingException(M.gmsh_missing_message())
         opts = self._export_options(parameters, context, crs)
         opts.liq_path = self.parameterAsFileOutput(parameters, "OUTPUT_LIQ", context) or None
         out = self.parameterAsFileOutput(parameters, "OUTPUT", context)
+        out = self._free_output(out, context, feedback)
         try:
             res = M.generate_and_export(layers, out, opts, crs, size, self.parameterAsDouble(parameters, "GROWTH", context),
                                         self.parameterAsInt(parameters, "SMOOTHING", context), sources, True,
-                                        None if fr in (None, "") else float(fr), None, self._progress(feedback), context.project())
+                                        None if fr in (None, "") else float(fr), None, self._progress(feedback), context.project(),
+                                        self.parameterAsInt(parameters, "MAX_NODES", context),
+                                        self.parameterAsDouble(parameters, "MIN_ANGLE", context) if method == "quality" else None,
+                                        method, terrain, self.parameterAsDouble(parameters, "OUTLINE_TOLERANCE", context) or None)
         except RuntimeError as exc:
             if str(exc) == "cancelled":
                 return {}
@@ -921,7 +1337,7 @@ def _distance_to_rings(px, py, rings, chunk=4000):
     segs = []
     for r in rings:
         r = np.asarray(r, dtype=np.float64)[:, :2]
-        if len(r) > 1 and not np.allclose(r[0], r[-1]):
+        if len(r) > 1 and not np.all(np.abs(r[0] - r[-1]) <= 1e-12 * max(1.0, float(np.abs(r).max()))):
             r = np.vstack([r, r[:1]])
         segs.append(np.stack([r[:-1], r[1:]], axis=1))
     S = np.concatenate(segs) if segs else np.zeros((0, 2, 2))
@@ -1080,6 +1496,68 @@ class MeshQualityAlgorithm(_MeshBase):
         return {"OUTPUT": dest}
 
 
-MESH_ALGORITHMS = [CreateMeshProjectAlgorithm, ChannelTemplateAlgorithm, GenerateMeshAlgorithm, ExportMeshAlgorithm,
+# --------------------------------------------------------------------------
+class CheckDrawingAlgorithm(_MeshBase):
+    def name(self):
+        return "checkdrawing"
+
+    def displayName(self):
+        return self.tr("Check the drawing of a mesh project")
+
+    def shortHelpString(self):
+        return self.tr(
+            "Finds what QGIS does not flag but the mesher pays for, measured against the element size wanted at each "
+            "place: near-duplicate vertices (closer than 1% of the size), spikes where a line turns back on itself, "
+            "corners of an outline closer than a quarter of the size, breakline vertices closer than a tenth of it "
+            "(every breakline vertex is a node), parts of the outline or islands within half an element of each other "
+            "(slivers), line ends and grid-zone corners just off the outline, invalid polygons, islands crossing the "
+            "outline and overlapping domain polygons. One point per problem. With Fix, the safe fixes are made and "
+            "saved: near-duplicates and small spikes removed, invalid polygons repaired, line ends snapped onto the "
+            "outline.")
+
+    def initAlgorithm(self, config=None):
+        self.addParameter(QgsProcessingParameterFile("PROJECT", self.tr("Mesh project"), extension="gpkg"))
+        self.addParameter(QgsProcessingParameterNumber("DEFAULT_SIZE", self.tr("Default element size (0 = from the project)"),
+                                                       _DOUBLE, 0.0, minValue=0.0))
+        self.addParameter(QgsProcessingParameterBoolean("FIX", self.tr("Make the safe fixes and save them"), False))
+        self.addParameter(QgsProcessingParameterFeatureSink("OUTPUT", self.tr("Drawing problems"), Qgis.ProcessingSourceType.VectorPoint))
+        self.addOutput(QgsProcessingOutputNumber("PROBLEMS", self.tr("Problems found")))
+        self.addOutput(QgsProcessingOutputNumber("FIXABLE", self.tr("Problems with a safe fix")))
+
+    def processAlgorithm(self, parameters, context, feedback):
+        from ..qgis_bridge import drawing as D
+
+        path = self.parameterAsFile(parameters, "PROJECT", context)
+        layers = M.open_mesh_project(path)
+        size = self.parameterAsDouble(parameters, "DEFAULT_SIZE", context)
+        if not size:
+            try:
+                size = float(M.read_settings(path).get("default_size") or 0)
+            except ValueError:
+                size = 0.0
+        size = size or M.auto_default_size(layers, context.project())
+        if not size:
+            raise QgsProcessingException(self.tr("The project has no domain to check."))
+        try:
+            build = M.build_mesh_input(layers, None, size, project=context.project(), max_nodes=None)
+        except ValueError as exc:
+            raise QgsProcessingException(str(exc))
+        chk = D.check_drawing(layers, build.inp.size, build.crs, context.project())
+        if self.parameterAsBoolean(parameters, "FIX", context) and chk.fixable:
+            for line in D.fix_drawing(layers, chk, build.inp.size, context.project(), commit=True):
+                feedback.pushInfo(line)
+            chk = D.check_drawing(layers, build.inp.size, build.crs, context.project())
+        for line in chk.summary():
+            feedback.pushInfo(line)
+        for i in chk.issues:
+            (feedback.pushWarning if not i.problem.fixable else feedback.pushInfo)(i.text)
+        mem = D.issues_layer(chk)
+        sink, dest = self.parameterAsSink(parameters, "OUTPUT", context, mem.fields(), Qgis.WkbType.Point, build.crs)
+        for f in mem.getFeatures():
+            sink.addFeature(f)
+        return {"OUTPUT": dest, "PROBLEMS": len(chk.issues), "FIXABLE": len(chk.fixable)}
+
+
+MESH_ALGORITHMS = [CreateMeshProjectAlgorithm, ChannelTemplateAlgorithm, RiverReachAlgorithm, GenerateMeshAlgorithm, ExportMeshAlgorithm,
                    CutMeshAlgorithm, ChannelMeshAlgorithm, RegularGridAlgorithm, InterpolateAlgorithm,
-                   BoundaryConditionsAlgorithm, MeshQualityAlgorithm]
+                   BoundaryConditionsAlgorithm, MeshQualityAlgorithm, CheckDrawingAlgorithm]

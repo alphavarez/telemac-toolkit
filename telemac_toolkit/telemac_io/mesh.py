@@ -79,7 +79,7 @@ def boundary_loops(ikle: np.ndarray, x: Optional[np.ndarray] = None, y: Optional
         loop = [start]
         cur = start
         while True:
-            succ = [b for b in nxt[cur] if (cur, b) in remaining]
+            succ = [b for b in nxt.get(cur, ()) if (cur, b) in remaining]
             if not succ:
                 break
             b = succ[0]

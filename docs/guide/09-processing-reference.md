@@ -162,7 +162,41 @@ Write the TELEMAC boundary conditions file (.cli). Every boundary node is a wall
 | Boundary conditions file | `OUTPUT` | output file |  |
 | Liquid boundaries file template *(optional)* | `OUTPUT_LIQ` | output file |  |
 
-### Channel or flume template (straight, bend, meanders)
+### Boundary lines from a .cli
+
+Id: `telemactoolkit:clilines`
+
+One line per liquid boundary of a TELEMAC mesh, with the name, type and value fields of a mesh project's boundary layer: the boundary conditions of an existing mesh as lines you can edit on the map (move their ends along the boundary, change the type, add a boundary), then write back with Boundary conditions from lines. Snap to the mesh boundary (Mesh boundary as lines) while editing. Values come from the first row of the liquid boundaries file when given.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| TELEMAC mesh (SELAFIN) | `MESH` | file |  |
+| Boundary conditions (empty = .cli next to the mesh) *(optional)* | `CLI` | file |  |
+| Liquid boundaries file (for the values) *(optional)* | `LIQ` | file |  |
+| CRS of the mesh (empty = project CRS) *(optional)* | `MESH_CRS` | CRS |  |
+| Boundary lines | `OUTPUT` | output layer |  |
+
+### Breaklines from a DEM
+
+Id: `telemactoolkit:dembreaklines`
+
+Lines along the sharp bends of the terrain, for the mesh to follow: crests (levee and bank tops, road embankments: the ground bends down on both sides) and toes (bank feet, channel edges: it bends up). A line is drawn where an element of the given size would miss the bend by more than the tolerance (|curvature| > 8 tolerance / size²). The cells beyond that are thinned to one-cell-wide lines, traced, simplified to the cell size, and lines shorter than the minimum length dropped. With a mesh project the lines are clipped to its domain and can be added to its constraint lines.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| DEM | `DEM` | raster |  |
+| Mesh project (extent, and where to add the lines) *(optional)* | `PROJECT` | file |  |
+| Extent (empty = the project's domain or the DEM) *(optional)* | `EXTENT` | extent |  |
+| Bed tolerance (m) | `TOLERANCE` | number | 0.05 |
+| Element size the lines are for (m, 0 = the project's default size) | `SIZE` | number | 0.0 |
+| Lines | `KINDS` | choice: Crests and toes; Crests (levee and bank tops, embankments); Toes (bank feet, channel edges) | Crests and toes |
+| Cell size (m, 0 = the DEM's pixel) *(advanced)* | `CELL` | number | 0.0 |
+| Shortest line kept (m, 0 = three element sizes) *(advanced)* | `MIN_LENGTH` | number | 0.0 |
+| Add the lines to the project's constraint lines | `ADD` | yes/no | no |
+| Added as | `MODE` | choice: Guide lines (resampled); Breaklines (every vertex kept) | Guide lines (resampled) |
+| Breaklines | `OUTPUT` | output layer |  |
+
+### Channel or flume template (straight, bend, meanders, composed, drawn, imported)
 
 Id: `telemactoolkit:channeltemplate`
 
@@ -176,11 +210,17 @@ Planform:
 
 The channel starts at the origin ((0, 0) by default) heading along the direction angle. It adds the domain, an inlet line (Q) and an outlet line (H) and, with Structured, a structured strip whose cross-sections are normal to the axis, also in bends. The bed is saved as a formula in the project: of x and y for a straight channel, of the channel coordinates s (along the axis) and n (across it, left positive) otherwise, with a bed level at the inlet, a slope along the axis and a rectangular or trapezoidal section. Generate mesh applies it. Leave the project empty to create one in local coordinates.
 
+- Composed from segments: any channel built from a text, one segment per line: width W, straight L, bend left|right R ANGLE, elbow left|right ANGLE (a sharp corner), meanders WAVELENGTH THETA0 COUNT, kinoshita WAVELENGTH THETA0 COUNT JS JF, taper WIDTH LENGTH (gradual width change), expand WIDTH (sudden expansion or contraction), slope S, drop D (a step in the bed), bed Z, and section KIND ... (the cross-section from there on: rect; trapezoid BOTTOM_WIDTH SIDE_SLOPE BANK_HEIGHT [OFFSET]; compound MAIN_WIDTH SIDE_SLOPE FLOODPLAIN_HEIGHT FLOODPLAIN_SLOPE [OFFSET]; v DEPTH [OFFSET]; parabolic DEPTH [OFFSET]; asym BOTTOM_WIDTH LEFT_SLOPE RIGHT_SLOPE BANK_HEIGHT [OFFSET]; custom FORMULA of n and b). Pieces between sudden width changes and sharp corners get their own structured strips; the corners and steps get triangles.
+- Centreline from a line layer: a line you draw (in local coordinates for a flume), with a constant width or a width field; corners sharper than the corner angle become elbows.
+- Imported file: TXT or CSV (x y [width] per line; a line without numbers starts a new polyline) or DXF, read as a centreline or as an outline (a basin or any shape: the largest closed line is the domain).
+
+Cross-sections (n across the axis, left positive; b half the local width): rectangular; trapezoidal; compound (a main channel and floodplains at a height, optionally rising towards the walls); V-shaped and parabolic (depth at the axis); asymmetric trapezoid (different side slopes); or any formula of n and b. The offset moves the main channel to the left (+) or right (-) of the axis.
+
 | Parameter | Key | Type | Default |
 | --- | --- | --- | --- |
 | Mesh project (empty = create one) *(optional)* | `PROJECT` | file |  |
 | New mesh project (when none is given) *(optional)* | `NEW_PROJECT` | output file |  |
-| Planform | `PLANFORM` | choice: Straight; Bend (straight inlet, circular bend, straight outlet); Meanders (sine-generated) | Straight |
+| Planform | `PLANFORM` | choice: Straight; Bend (straight inlet, circular bend, straight outlet); Meanders (sine-generated); Composed from segments (text below); Centreline from a line layer; Imported file (TXT, CSV or DXF) | Straight |
 | Width (m) | `WIDTH` | number | 1.0 |
 | Straight: length (m) | `LENGTH` | number | 20.0 |
 | Bend and meanders: straight inlet length (m) | `INLET` | number | 5.0 |
@@ -197,12 +237,64 @@ The channel starts at the origin ((0, 0) by default) heading along the direction
 | Structured mesh over the channel | `STRUCTURED` | yes/no | yes |
 | Bed level at the inlet (m) | `BED_Z0` | number | 0.0 |
 | Bed slope along the axis (m/m, positive downstream) | `SLOPE` | number | 0.0 |
-| Cross-section | `SECTION` | choice: Rectangular (flat bed); Trapezoidal | Rectangular (flat bed) |
+| Cross-section | `SECTION` | choice: Rectangular (flat bed); Trapezoidal; Compound (main channel and floodplains); V-shaped; Parabolic; Asymmetric trapezoid; Custom formula of n and b | Rectangular (flat bed) |
 | Trapezoid: bottom width (m) | `BOTTOM_WIDTH` | number | 0.5 |
 | Trapezoid: side slope (horizontal per 1 vertical) | `SIDE_SLOPE` | number | 1.0 |
 | Trapezoid: bank height (m) | `BANK_HEIGHT` | number | 0.2 |
+| Composed: segments, one per line *(optional)* | `SEGMENTS` | text | (example text) |
+| Centreline: line layer (local coordinates for a flume) *(optional)* | `CENTRELINE` | vector layer |  |
+| Centreline: width field (optional; one width per line) *(optional)* | `WIDTH_FIELD` | field |  |
+| Imported file (TXT, CSV or DXF) *(optional)* | `IMPORT_FILE` | file |  |
+| Imported file: read as | `IMPORT_AS` | choice: Centreline (the longest line; a third column gives widths); Outline (the largest closed line is the domain, closed lines inside it islands, open lines breaklines) | Centreline (the longest line; a third column gives widths) |
+| Drawn or imported: corners sharper than this are elbows (degrees) *(advanced)* | `CORNER` | number | 30.0 |
+| Compound: floodplain rise towards the walls (m/m) *(advanced)* | `FLOODPLAIN_SLOPE` | number | 0.0 |
+| Asymmetric: right side slope (horizontal per 1 vertical; the left one is the side slope) *(advanced)* | `RIGHT_SLOPE` | number | 2.0 |
+| Main channel offset from the axis (m, left positive) *(advanced)* | `SECTION_OFFSET` | number | 0.0 |
+| Custom section: formula of n and b (height above the axis bed) *(optional)* *(advanced)* | `SECTION_FORMULA` | text | 0.1*(n/b)**2 |
 | Inflow (m³/s, optional) *(optional)* | `Q` | number |  |
 | Outlet water level (m, optional) *(optional)* | `H` | number |  |
+
+### Check the drawing of a mesh project
+
+Id: `telemactoolkit:checkdrawing`
+
+Finds what QGIS does not flag but the mesher pays for, measured against the element size wanted at each place: near-duplicate vertices (closer than 1% of the size), spikes where a line turns back on itself, corners of an outline closer than a quarter of the size, breakline vertices closer than a tenth of it (every breakline vertex is a node), parts of the outline or islands within half an element of each other (slivers), line ends and grid-zone corners just off the outline, invalid polygons, islands crossing the outline and overlapping domain polygons. One point per problem. With Fix, the safe fixes are made and saved: near-duplicates and small spikes removed, invalid polygons repaired, line ends snapped onto the outline.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| Mesh project | `PROJECT` | file |  |
+| Default element size (0 = from the project) | `DEFAULT_SIZE` | number | 0.0 |
+| Make the safe fixes and save them | `FIX` | yes/no | no |
+| Drawing problems | `OUTPUT` | output layer |  |
+
+### Compare meshing methods
+
+Id: `telemactoolkit:comparemeshing`
+
+Meshes one mesh project with each chosen method and measures every result, and any mesh files you add (from Blue Kenue, Salomé or an earlier run), on equal terms. The table and the HTML report give, per mesh:
+
+- Element shape: smallest angle, share of elements below 30° and 20°, largest angle, aspect ratio (1 = equilateral), edge lengths.
+- Size changes: area ratio of neighbouring elements (1 = equal).
+- Outline: how far the mesh boundary strays from the drawn domain.
+- Terrain (with a DEM): how far TELEMAC's linear bed inside each element is from the DEM (RMS, 95th percentile, largest) and, with a water level, the error in the water volume under it.
+- Time step at a Courant number of 1, for the water level (or depth) and velocity given: the largest stable step TELEMAC's explicit parts allow, set by the smallest elements in deep, fast water.
+- Nodes, elements, density and meshing time.
+
+The best value of each row is marked in the report. No single score is given: a finer mesh follows the DEM better and needs a smaller time step; the report shows that trade-off, the choice stays yours.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| Mesh project (empty = only the mesh files below) *(optional)* | `PROJECT` | file |  |
+| Methods *(optional)* | `METHODS` | choice: Balanced (built-in: regular nodes, smoothing); Quality-guaranteed (built-in: refine until every angle reaches the target); Gmsh Delaunay (fastest on large meshes); Gmsh Frontal-Delaunay (highest element quality); Gmsh MeshAdapt (most robust); Gmsh quadrilaterals (for programs that read them; TELEMAC gets two triangles each) | [0, 1, 3] |
+| Mesh files to compare as well *(optional)* | `MESHES` | layers |  |
+| DEM (bed error, volume, time step) *(optional)* | `DEM` | raster |  |
+| Water level for the volume and time step (m, optional) *(optional)* | `LEVEL` | number |  |
+| Or a depth for the time step (m) | `DEPTH` | number | 2.0 |
+| Velocity for the time step (m/s) | `VELOCITY` | number | 1.0 |
+| Default element size (0 = the project's) *(advanced)* | `DEFAULT_SIZE` | number | 0.0 |
+| Comparison table | `TABLE` | output layer |  |
+| Report *(optional)* | `REPORT` | output file |  |
+| Folder for the generated meshes (SELAFIN) *(optional)* | `MESH_FOLDER` | folderDestination |  |
 
 ### Edit node values of a mesh (bottom, friction, …)
 
@@ -238,6 +330,24 @@ Typical edits: a new survey over a reach (rasters, polygon), a dredged channel (
 | Output geometry file | `OUTPUT` | output file |  |
 | Open the mesh when done | `LOAD` | yes/no | yes |
 
+### Element sizes from terrain (raster)
+
+Id: `telemactoolkit:terrainsizes`
+
+The element sizes terrain refinement asks for, as a raster to look at before meshing: small where linear elements would miss the DEM by more than the tolerance (banks, levees, embankments), the largest size on flat ground, and never growing faster than the growth rate. TELEMAC interpolates the bed linearly in each element; over an element of size h that misses a curvature kappa by about h² kappa / 8, hence h = sqrt(8 tolerance / kappa). Generate mesh applies the same sizes with its terrain tolerance.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| DEM | `DEM` | raster |  |
+| Mesh project (its domain sets the extent) *(optional)* | `PROJECT` | file |  |
+| Extent (empty = the project's domain or the DEM) *(optional)* | `EXTENT` | extent |  |
+| Bed tolerance (m) | `TOLERANCE` | number | 0.05 |
+| Smallest size (m) | `MIN_SIZE` | number | 2.0 |
+| Largest size (m) | `MAX_SIZE` | number | 30.0 |
+| Growth rate | `GROWTH` | number | 1.2 |
+| Cell size (m, 0 = half the smallest size) *(advanced)* | `CELL` | number | 0.0 |
+| Sizes | `OUTPUT` | rasterDestination |  |
+
 ### Export or convert mesh
 
 Id: `telemactoolkit:exportmesh`
@@ -257,6 +367,7 @@ Write an existing mesh (SELAFIN, 2DM, UGRID or any mesh QGIS reads) for another 
 | Point moved to (0, 0) *(optional)* *(advanced)* | `FRAME_POINT` | point |  |
 | Rotation of the local axes (degrees, counter-clockwise) *(advanced)* | `FRAME_ANGLE` | number | 0.0 |
 | TELEMAC: store the shift in the file header, so QGIS still shows the mesh in place *(advanced)* | `STORE_OFFSET` | yes/no | yes |
+| TELEMAC: double precision (SERAFIND; the steering file then needs GEOMETRY FILE FORMAT = 'SERAFIND', which the steering file tool writes) *(advanced)* | `DOUBLE` | yes/no | no |
 | Mesh file | `OUTPUT` | output file |  |
 | TELEMAC liquid boundaries template (.liq) *(optional)* | `OUTPUT_LIQ` | output file |  |
 | Open the result when done | `LOAD` | yes/no | yes |
@@ -279,6 +390,7 @@ Keep the elements whose centre lies inside the polygons (or outside them) and wr
 | Point moved to (0, 0) *(optional)* *(advanced)* | `FRAME_POINT` | point |  |
 | Rotation of the local axes (degrees, counter-clockwise) *(advanced)* | `FRAME_ANGLE` | number | 0.0 |
 | TELEMAC: store the shift in the file header, so QGIS still shows the mesh in place *(advanced)* | `STORE_OFFSET` | yes/no | yes |
+| TELEMAC: double precision (SERAFIND; the steering file then needs GEOMETRY FILE FORMAT = 'SERAFIND', which the steering file tool writes) *(advanced)* | `DOUBLE` | yes/no | no |
 | Mesh file | `OUTPUT` | output file |  |
 | Open the result when done | `LOAD` | yes/no | yes |
 
@@ -310,6 +422,12 @@ Advanced: write the file in local coordinates (lower-left corner or a chosen poi
 | Default element size (0 = from the project) | `DEFAULT_SIZE` | number | 0.0 |
 | Size growth rate | `GROWTH` | number | 1.2 |
 | Smoothing iterations *(advanced)* | `SMOOTHING` | number | 8 |
+| Follow the outline and lines within (m, 0 = 5% of the element size) *(advanced)* | `OUTLINE_TOLERANCE` | number | 0.0 |
+| Method (Gmsh ones need the gmsh package) | `METHOD` | choice: Balanced (built-in: regular nodes, smoothing); Quality-guaranteed (built-in: refine until every angle reaches the target); Gmsh Delaunay (fastest on large meshes); Gmsh Frontal-Delaunay (highest element quality); Gmsh MeshAdapt (most robust); Gmsh quadrilaterals (for programs that read them; TELEMAC gets two triangles each) | Balanced (built-in: regular nodes, smoothing) |
+| Quality-guaranteed: smallest angle (degrees, 20 to 30) | `MIN_ANGLE` | number | 30.0 |
+| Terrain refinement: bed tolerance (m, 0 = off; uses the first bottom raster) | `TERRAIN_TOLERANCE` | number | 0.0 |
+| Terrain refinement: smallest element size (m, 0 = default size / 15) *(advanced)* | `TERRAIN_MIN_SIZE` | number | 0.0 |
+| Node limit (0 = no limit) *(advanced)* | `MAX_NODES` | number | 2000000 |
 | Bottom: rasters (priority order) *(optional)* | `RASTERS` | layers |  |
 | Bottom: survey points *(optional)* | `POINTS` | vector layer |  |
 | Survey value field (empty = point Z) *(optional)* | `POINT_FIELD` | field |  |
@@ -322,9 +440,24 @@ Advanced: write the file in local coordinates (lower-left corner or a chosen poi
 | Point moved to (0, 0) *(optional)* *(advanced)* | `FRAME_POINT` | point |  |
 | Rotation of the local axes (degrees, counter-clockwise) *(advanced)* | `FRAME_ANGLE` | number | 0.0 |
 | TELEMAC: store the shift in the file header, so QGIS still shows the mesh in place *(advanced)* | `STORE_OFFSET` | yes/no | yes |
+| TELEMAC: double precision (SERAFIND; the steering file then needs GEOMETRY FILE FORMAT = 'SERAFIND', which the steering file tool writes) *(advanced)* | `DOUBLE` | yes/no | no |
 | Mesh file | `OUTPUT` | output file |  |
 | TELEMAC liquid boundaries template (.liq) *(optional)* | `OUTPUT_LIQ` | output file |  |
 | Open the result when done | `LOAD` | yes/no | yes |
+
+### Import Blue Kenue lines (.i2s, .i3s)
+
+Id: `telemactoolkit:bluekenuelines`
+
+Reads a Blue Kenue line set (.i2s, or .i3s with a z per vertex) into a line layer with each line's value, and can add the lines to a layer of a mesh project: constraint lines (breaklines or guide lines), the domain or islands (closed lines become polygons), or refinement areas with the line value as their size. With the same input lines a mesh from Blue Kenue and meshes from this plugin can be compared (Compare meshing methods, which also reads Blue Kenue .t3s meshes). Blue Kenue files carry no CRS: give it.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| Blue Kenue line set | `INPUT` | file |  |
+| CRS of the coordinates *(optional)* | `CRS` | CRS |  |
+| Mesh project to add the lines to (optional) *(optional)* | `PROJECT` | file |  |
+| Add them as | `TARGET` | choice: Nothing (only the output layer); Constraint lines, breakline; Constraint lines, guide line; Domain (closed lines); Islands (closed lines); Refinement areas (closed lines, the value as size) | Nothing (only the output layer) |
+| Lines | `OUTPUT` | output layer |  |
 
 ### Mesh quality
 
@@ -366,6 +499,69 @@ Choose local coordinates for a laboratory flume or a schematic channel: the proj
 | Default element size (m) *(optional)* | `DEFAULT_SIZE` | number | 0.0 |
 | Mesh project | `OUTPUT` | output file |  |
 
+### Optimise or adapt a mesh (MMG)
+
+Id: `telemactoolkit:mmgadapt`
+
+Runs MMG's mmg2d on a TELEMAC mesh (MMG is not part of the plugin: install it from mmgtools.org or the conda-forge package mmgsuite, and give the path of mmg2d_O3 once; it is remembered).
+
+- Optimise: better element shapes with the same sizes.
+- Adapt to the terrain: sizes from the DEM, small where linear elements would miss it by more than the bed tolerance (see Element sizes from terrain).
+- Adapt to a result: sizes from the curvature of a variable of a TELEMAC result on this mesh (free surface, velocity, depth), with a tolerance in its unit, for a second run with elements where the flow needs them (solution-adaptive refinement).
+
+The boundary nodes do not move, so the boundary conditions carry over; elements inside the 'keep' polygons (structured channels, bridges) are left as they are, and sizes next to them are held to their edges. Every variable is carried over (unchanged nodes exactly, new ones interpolated); with a DEM the bottom is sampled from it. The .cli next to the mesh is rebuilt.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| TELEMAC mesh (SELAFIN, .cli next to it) | `INPUT` | file |  |
+| Mode | `MODE` | choice: Optimise (better shapes, the same sizes); Adapt to the terrain (DEM and bed tolerance); Adapt to a TELEMAC result (a variable and its tolerance) | Optimise (better shapes, the same sizes) |
+| DEM (terrain mode; also resamples the bottom) *(optional)* | `DEM` | raster |  |
+| Tolerance (m for the terrain; the variable's unit for a result) | `TOLERANCE` | number | 0.05 |
+| TELEMAC result on this mesh (result mode) *(optional)* | `RESULT` | file |  |
+| Variable of the result *(optional)* | `VARIABLE` | text | FREE SURFACE |
+| Frames of the result | `WHEN` | choice: Last frame; Largest value over all frames | Largest value over all frames |
+| Smallest size (m) | `HMIN` | number | 1.0 |
+| Largest size (m, 0 = the mesh's longest edge) | `HMAX` | number | 0.0 |
+| Growth rate between neighbours | `HGRAD` | number | 1.2 |
+| Areas to keep as they are (polygons) *(optional)* | `KEEP` | vector layer |  |
+| CRS of the mesh (empty = project CRS) *(optional)* | `MESH_CRS` | CRS |  |
+| mmg2d program (empty = remembered, MMG2D variable or PATH) *(optional)* | `MMG` | file |  |
+| New mesh | `OUTPUT` | output file |  |
+
+### Re-mesh inside polygons
+
+Id: `telemactoolkit:remeshregion`
+
+Replace the elements of a TELEMAC mesh whose centre lies inside the polygons by a new mesh of the same area: to refine around a structure, fix a patch of bad elements, or coarsen an area. Where the area borders old elements its outline keeps its nodes, so the new elements join the old ones node for node; the size grows from the outline's edges to the size inside. Where it reaches the mesh boundary, nodes can be added there and take its boundary conditions.
+
+Every variable of every frame is carried over: unchanged nodes keep their values, new nodes get values interpolated in the original elements. The .cli next to the mesh is rebuilt for the new numbering. Size: a number, a field of the polygons, or the median edge of the area's outline.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| TELEMAC mesh (SELAFIN, .cli next to it) | `INPUT` | file |  |
+| Areas to re-mesh | `POLYGONS` | vector layer |  |
+| Element size inside (m, 0 = the outline's edges) | `SIZE` | number | 0.0 |
+| Or a size field of the polygons *(optional)* | `SIZE_FIELD` | field |  |
+| Method | `METHOD` | choice: Balanced; Quality-guaranteed (smallest angle 30 degrees) | Balanced |
+| CRS of the mesh (empty = project CRS) *(optional)* | `MESH_CRS` | CRS |  |
+| Re-meshed mesh | `OUTPUT` | output file |  |
+
+### Rebuild a TELEMAC mesh after editing it in QGIS
+
+Id: `telemactoolkit:rebuildedited`
+
+QGIS edits mesh layers with its Mesh Digitizing tools (add, remove and move vertices, flip edges, split faces, force the mesh along lines), but the saved file keeps only the geometry: the bottom, the friction and the other variables are lost, and the .cli no longer matches the nodes. This tool gives them back: nodes that did not move keep their values exactly, new or moved nodes get values interpolated in the original elements (nearest original node outside them), and the .cli is rebuilt in TELEMAC order. Boundary nodes that existed keep their conditions; new ones take the type of the original boundary edge they lie on when both of its ends share it, otherwise they are walls.
+
+Edited mesh: the file saved by QGIS (SELAFIN or any mesh format QGIS reads). Original: the TELEMAC mesh before editing, with its .cli next to it.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| Edited mesh (saved by QGIS) | `EDITED` | file |  |
+| Original TELEMAC mesh (SELAFIN, .cli next to it) | `ORIGINAL` | file |  |
+| Original boundary conditions (empty = .cli next to the original) *(optional)* | `CLI` | file |  |
+| Distance under which a node has not moved (m) *(advanced)* | `TOLERANCE` | number | 0.0001 |
+| Rebuilt mesh | `OUTPUT` | output file |  |
+
 ### Regular grid mesh
 
 Id: `telemactoolkit:regulargrid`
@@ -389,8 +585,58 @@ A structured mesh of nx by ny rectangular cells, starting at the origin (lower-l
 | Point moved to (0, 0) *(optional)* *(advanced)* | `FRAME_POINT` | point |  |
 | Rotation of the local axes (degrees, counter-clockwise) *(advanced)* | `FRAME_ANGLE` | number | 0.0 |
 | TELEMAC: store the shift in the file header, so QGIS still shows the mesh in place *(advanced)* | `STORE_OFFSET` | yes/no | yes |
+| TELEMAC: double precision (SERAFIND; the steering file then needs GEOMETRY FILE FORMAT = 'SERAFIND', which the steering file tool writes) *(advanced)* | `DOUBLE` | yes/no | no |
 | Mesh file | `OUTPUT` | output file |  |
 | Open the mesh when done | `LOAD` | yes/no | yes |
+
+### River reach or network from centrelines or bank lines
+
+Id: `telemactoolkit:riverreach`
+
+Draws a natural river in a mesh project, ready for Generate mesh: the left bank, right bank and axis of a structured channel strip with matched cross-sections normal to the flow, the domain (or the project's own), and inflow (Q) and outflow (H) lines where the river meets the domain outline.
+
+Banks:
+
+- Centreline and a constant width.
+- Centreline and a DEM: at every cross-section the terrain across the river is read, the bed found near the centreline, and each bank put where the terrain first rises the bankfull depth above the bed (searched up to the largest width). The widths are smoothed along the river and the axis moved midway between the banks.
+- Two bank lines (one layer with two lines, in any order and direction).
+
+With a DEM the river is turned to run downstream, from the higher bed to the lower one; without one, draw the centreline downstream. Jagged lines are smoothed over the smoothing length (default: the width) and, in tight bends, the cross-sections are turned until they no longer cross; any that still cross are reported.
+
+Boundaries: the inflow covers the channel and the outflow the whole downstream end of the domain by default (water on the floodplain can leave). The lines stop short of their ends, so the bank and corner nodes stay walls. Values are optional; set them later in the boundary layer or the .liq file.
+
+River networks: give several centrelines, each tributary ending on the river it joins (or lines meeting end to end at a bifurcation). Every reach between junctions gets its own strip, stopped short of the junction; the channel area at the junction is meshed with triangles of the strips' size, with its banks as guide lines, so confluences keep their corners. Free upstream ends get inflow lines, downstream ends outflow lines (lines must run downstream, or be turned by the DEM). An optional width field gives each line its own constant width.
+
+Nodes across follow the width (default): where the river widens or narrows the number of nodes across changes by one row of triangles at a time, so the spacing across stays near the spacing along. In tight bends only the cross-sections there are turned, until none cross and no inner-bank cell is shorter than the spacing over the largest ratio; the others stay normal to the flow.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| Mesh project (empty = create one) *(optional)* | `PROJECT` | file |  |
+| New mesh project (when none is given) *(optional)* | `NEW_PROJECT` | output file |  |
+| River given as | `SOURCE` | choice: Centreline; Two bank lines | Centreline |
+| Centreline(s) (line layer; several lines make a network; selected features if any) *(optional)* | `CENTRELINE` | vector layer |  |
+| Width field of the centrelines (one constant width per line, optional) *(optional)* | `WIDTH_FIELD` | field |  |
+| Bank lines (line layer with the two banks) *(optional)* | `BANKS` | vector layer |  |
+| Width (centreline) | `WIDTH_MODE` | choice: Constant width; From the DEM (bankfull depth) | Constant width |
+| Constant width (m) | `WIDTH` | number | 20.0 |
+| DEM (banks from the terrain, downstream direction) *(optional)* | `DEM` | raster |  |
+| Bankfull depth above the bed (m) | `BANKFULL_DEPTH` | number | 1.5 |
+| Largest width to search in the DEM (m) | `MAX_WIDTH` | number | 100.0 |
+| Smallest width (m) *(advanced)* | `MIN_WIDTH` | number | 0.0 |
+| Cross-section spacing along the river (m) | `SPACING` | number | 10.0 |
+| Nodes across the channel (0 = width / spacing, odd) | `NODES_ACROSS` | number | 0 |
+| Nodes across follow the width (when 0 above) | `VARY_ACROSS` | yes/no | yes |
+| Bends: inner-bank cells at least the spacing divided by *(advanced)* | `MAX_RATIO` | number | 4.0 |
+| Smoothing length of the centreline (m, 0 = the width) *(advanced)* | `SMOOTHING` | number | 0.0 |
+| Domain | `DOMAIN_MODE` | choice: Create it: the reach plus a floodplain on each side; Keep the domain of the project | Create it: the reach plus a floodplain on each side |
+| Floodplain width on each side (m) | `FLOODPLAIN` | number | 200.0 |
+| Element size on the floodplain (m, 0 = default size) | `FLOODPLAIN_SIZE` | number | 0.0 |
+| Add inflow and outflow lines | `BOUNDARIES` | yes/no | yes |
+| Inflow (Q) covers | `INFLOW_SPAN` | choice: The channel only; The whole end of the domain | The channel only |
+| Outflow (H) covers | `OUTFLOW_SPAN` | choice: The whole end of the domain; The channel only | The whole end of the domain |
+| Inflow (m³/s, optional) *(optional)* | `Q` | number |  |
+| Outflow water level (m, optional) *(optional)* | `H` | number |  |
+| Channel name | `NAME` | text | river |
 
 ### Structured channel mesh
 
@@ -409,7 +655,138 @@ A structured mesh of a channel between a left and a right bank line, optionally 
 | Point moved to (0, 0) *(optional)* *(advanced)* | `FRAME_POINT` | point |  |
 | Rotation of the local axes (degrees, counter-clockwise) *(advanced)* | `FRAME_ANGLE` | number | 0.0 |
 | TELEMAC: store the shift in the file header, so QGIS still shows the mesh in place *(advanced)* | `STORE_OFFSET` | yes/no | yes |
+| TELEMAC: double precision (SERAFIND; the steering file then needs GEOMETRY FILE FORMAT = 'SERAFIND', which the steering file tool writes) *(advanced)* | `DOUBLE` | yes/no | no |
 | Mesh file | `OUTPUT` | output file |  |
 | Open the mesh when done | `LOAD` | yes/no | yes |
+
+### Suggest element sizes from a DEM
+
+Id: `telemactoolkit:suggestsizes`
+
+Sizes for a mesh from what the DEM can show, the terrain, the rivers and a node budget:
+
+- smallest size: two pixels (finer elements only interpolate the same pixels);
+- terrain tolerance: about the vertical accuracy of a DEM with such pixels (1 m LiDAR 0.05 m, 5 m DEMs 0.2 m, 15 m DEMs 0.5 m);
+- default size (floodplain): what the median terrain inside the domain asks for at that tolerance, at least four pixels, at most a twentieth of the domain, within half the node budget;
+- rivers (the project's structured channels): a spacing across of a eighth of the width (7 nodes or more), 1.5 times that along;
+- the number of nodes with the terrain refinement (the tolerance is relaxed if it is over the budget) and the time step at Courant number 1.
+
+Without a project, or before the domain is drawn, the DEM's own extent is used. With 'Apply', the default size, terrain tolerance and smallest size go into the project's settings (step 1 of the panel).
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| DEM | `DEM` | raster |  |
+| Mesh project (domain and channels; optional) *(optional)* | `PROJECT` | file |  |
+| Node budget | `NODE_BUDGET` | number | 300000 |
+| Typical depth for the time step (m) *(advanced)* | `DEPTH` | number | 2.0 |
+| Typical velocity for the time step (m/s) *(advanced)* | `VELOCITY` | number | 1.5 |
+| Apply to the project's settings | `APPLY` | yes/no | no |
+
+## Mesh (group Mesh)
+
+### Check boundary conditions
+
+Id: `telemactoolkit:checkboundaries`
+
+Lists the liquid boundaries of a mesh with the numbers TELEMAC gives them, and checks them against the liquid boundaries file, the stage-discharge curves and the steering file when given (or found through the steering file): a column for every prescribed value, levels that leave a boundary dry, curves on boundaries that are not prescribed elevations, value counts in the steering file, two liquid boundaries touching without a wall node between them, boundaries with fewer than 5 nodes. The output layer draws each liquid boundary labelled with its number.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| Mesh (SELAFIN geometry with BOTTOM) | `MESH` | file |  |
+| Boundary conditions file (empty = .cli next to the mesh) *(optional)* | `CLI` | file |  |
+| Steering file (optional; gives the other files) *(optional)* | `STEERING` | file |  |
+| Liquid boundaries file *(optional)* | `LIQ` | file |  |
+| Stage-discharge curves file *(optional)* | `STAGE` | file |  |
+| CRS of the mesh (empty = project CRS) *(optional)* | `MESH_CRS` | CRS |  |
+| Liquid boundaries | `OUTPUT` | output layer |  |
+
+### Initial conditions file
+
+Id: `telemactoolkit:initialconditions`
+
+Write a SELAFIN file with the initial state of a run (velocities zero, water depth, free surface, bottom), for PREVIOUS COMPUTATION FILE with INITIAL TIME SET TO ZERO = YES. The water level is constant, or varies linearly along a channel axis from the upstream to the downstream level (nodes beside the axis take the level of their position along it), or the depth above the bed is constant. Nodes where the level is below the bed are dry.
+
+Depth above the bed of the channel axes: for rivers and river networks. Every node takes the level of the nearest point of any axis line: the bed there (the nearest mesh node, smoothed along the line) plus the depth. The axis layer may be the mesh project's channels layer: only its axis lines are used. The banks and the floodplain above that level stay dry, and every branch starts with water.
+
+Start close to the expected flow: for a river, the downstream level from the rating curve at the first discharge and a level rising upstream with the slope. A state far from the first boundary values makes TELEMAC drain or fill the model at the start, which can dry a discharge boundary.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| Mesh (SELAFIN geometry with BOTTOM) | `MESH` | file |  |
+| Initial water | `MODE` | choice: Constant water level; Water level along a channel axis (upstream and downstream levels); Depth above the bed; Depth above the bed of the channel axes (rivers and networks) | Constant water level |
+| Water level (m), or upstream level along the axis | `LEVEL` | number | 0.0 |
+| Downstream level along the axis (m) | `LEVEL_DOWN` | number | 0.0 |
+| Channel axis (line, drawn downstream) *(optional)* | `AXIS` | vector layer |  |
+| Depth above the bed (m) | `DEPTH` | number | 0.0 |
+| CRS of the mesh (for the axis; empty = project CRS) *(optional)* | `MESH_CRS` | CRS |  |
+| Initial conditions file | `OUTPUT` | output file |  |
+
+### Liquid boundaries file from a table (hydrographs)
+
+Id: `telemactoolkit:liquidboundariesfile`
+
+Write TELEMAC's LIQUID BOUNDARIES FILE (.liq) from a table: a CSV or Excel sheet loaded in QGIS, or any layer, with a time column and one column per prescribed value (for example HEC-HMS output). The mesh and its .cli tell which columns TELEMAC expects, in its numbering: Q(n) for a discharge boundary, SL(n) for a water level (not needed where a stage-discharge curve gives it), U(n) and V(n) for velocities.
+
+Columns: list them as COLUMN=field, for example 'Q(1)=flow_m3s; SL(2)=level'; or leave it empty and choose the value fields in the order of the expected columns (the log lists them). Times: numbers in the chosen unit, or dates and times; they are written in seconds from the first row, and the first date is given for ORIGINAL DATE OF TIME. Rows are sorted by time; rows with an empty value are skipped.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| Mesh (SELAFIN geometry with BOTTOM) | `MESH` | file |  |
+| Boundary conditions file (empty = .cli next to the mesh) *(optional)* | `CLI` | file |  |
+| Table (CSV, Excel or any layer) | `TABLE` | vector layer |  |
+| Time field | `TIME_FIELD` | field |  |
+| Time unit | `TIME_UNIT` | choice: seconds; minutes; hours; days; date and time | hours |
+| Value fields, in the order of the expected columns *(optional)* | `VALUE_FIELDS` | field |  |
+| Or the columns by name, e.g. Q(1)=flow; SL(2)=level *(optional)* | `COLUMNS` | text |  |
+| Stage-discharge curves file (its boundaries need no SL column) *(optional)* | `STAGE` | file |  |
+| Liquid boundaries file | `OUTPUT` | output file |  |
+
+### Stage-discharge curve for an outflow boundary
+
+Id: `telemactoolkit:stagedischarge`
+
+Normal-depth rating curve Z(Q) of a liquid boundary, computed on the boundary itself (its nodes and their bottom, as TELEMAC sees the section) with Manning's formula Q = sqrt(S) A R^(2/3) / n, the section divided where the roughness changes. Written in TELEMAC's STAGE-DISCHARGE CURVES FILE format; an existing file keeps its other curves. The boundary must be a prescribed elevation (5 4 4); the steering file then needs STAGE-DISCHARGE CURVES = 1 for it (the log gives the lines).
+
+Slope: the energy slope, usually the bed or water-surface slope of the reach downstream. Roughness: one Manning's n, or the BOTTOM FRICTION variable of the mesh (Manning law). Above the lower end of the section, its ends act as vertical walls, like the closed boundaries of the mesh. A warning is given if the flow at the section is supercritical, where a rating curve does not control the level.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| Mesh (SELAFIN geometry with BOTTOM) | `MESH` | file |  |
+| Boundary conditions file (empty = .cli next to the mesh) *(optional)* | `CLI` | file |  |
+| Liquid boundary number (0 = the only prescribed elevation) | `BOUNDARY` | number | 0 |
+| Energy slope (m/m) | `SLOPE` | number | 0.001 |
+| Manning's n | `MANNING` | number | 0.03 |
+| Use the BOTTOM FRICTION of the mesh (Manning) when present | `USE_MESH_FRICTION` | yes/no | yes |
+| Highest level of the curve (m, empty = highest ground) *(optional)* *(advanced)* | `TOP` | number |  |
+| Points of the curve *(advanced)* | `POINTS` | number | 40 |
+| Stage-discharge curves file | `OUTPUT` | output file |  |
+| Curve table *(optional)* | `TABLE` | output layer |  |
+
+### TELEMAC-2D steering file
+
+Id: `telemactoolkit:steeringfile`
+
+Write a TELEMAC-2D steering file (.cas) for a mesh, its .cli and the other files: liquid boundaries, stage-discharge curves, initial conditions. The liquid boundaries come from the .cli, in TELEMAC's numbering, with PRESCRIBED FLOWRATES and ELEVATIONS from the first row of the liquid boundaries file, STAGE-DISCHARGE CURVES for the boundaries in the curves file, and VELOCITY PROFILES = 4 (velocity in sqrt(h)) on discharge boundaries, which keeps them stable where the depth varies across the section. The time step can be estimated for a Courant number of 1 from a typical depth and velocity.
+
+The numerical settings are those of this plugin's demo cases that ran in TELEMAC-2D v9.1 (wetting and drying with positive depths). Review every value before running.
+
+| Parameter | Key | Type | Default |
+| --- | --- | --- | --- |
+| Mesh (SELAFIN geometry with BOTTOM) | `MESH` | file |  |
+| Boundary conditions file (empty = .cli next to the mesh) *(optional)* | `CLI` | file |  |
+| Liquid boundaries file *(optional)* | `LIQ` | file |  |
+| Stage-discharge curves file *(optional)* | `STAGE` | file |  |
+| Initial conditions file (empty = start dry or at a level) *(optional)* | `INITIAL` | file |  |
+| Or a constant initial water level (m) *(optional)* | `INITIAL_LEVEL` | number |  |
+| Duration (s) | `DURATION` | number | 3600.0 |
+| Time step (s, 0 = estimate for Courant 1) | `TIME_STEP` | number | 0.0 |
+| Typical depth for the estimate (m) | `DEPTH_GUESS` | number | 2.0 |
+| Typical velocity for the estimate (m/s) | `VELOCITY_GUESS` | number | 1.0 |
+| Results every (s) | `OUTPUT_PERIOD` | number | 600.0 |
+| Friction law | `FRICTION_LAW` | choice: Manning; Strickler; Chezy; Nikuradse | Manning |
+| Friction coefficient (where the mesh has none) | `FRICTION` | number | 0.03 |
+| Title | `TITLE` | text | TELEMAC-2D model |
+| Start date and time (optional) *(optional)* | `START` | datetime |  |
+| Steering file | `OUTPUT` | output file |  |
 
 [← Formats, coordinates and boundary conditions](08-formats-coordinates-boundaries.md) · [Contents](README.md) · [Next: Scripting with Python →](10-python.md)

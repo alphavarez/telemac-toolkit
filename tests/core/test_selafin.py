@@ -147,6 +147,22 @@ def test_origin_offset_keeps_utm_precision(tmp_path):
     assert np.abs(hq.y - Y).max() > 0.01
 
 
+def test_origin_also_for_coordinates_of_a_few_hundred_km(tmp_path):
+    """125 km, 189 km: float32 alone rounds to 8-16 mm, so nodes would sit off the drawn outline."""
+    x, y, ikle = tiny_mesh()
+    X = 125021.8201 + x * 200.0
+    Y = 188786.0423 + y * 240.0
+    p = tmp_path / "local.slf"
+    write_selafin(p, X, Y, ikle, {"BOTTOM": np.zeros(4)})
+    h = read_header(p)
+    assert h.origin == (125021.0, 188786.0)
+    assert np.abs(h.x - X).max() < 1e-4 and np.abs(h.y - Y).max() < 1e-4
+    # small laboratory coordinates keep no origin
+    q = tmp_path / "flume.slf"
+    write_selafin(q, x * 20.0, y * 2.0, ikle, {"BOTTOM": np.zeros(4)})
+    assert read_header(q).origin == (0.0, 0.0)
+
+
 def test_incomplete_last_frame_is_ignored(tmp_path):
     p = tmp_path / "running.slf"
     data = open(R2D, "rb").read()

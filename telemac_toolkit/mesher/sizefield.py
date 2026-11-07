@@ -16,7 +16,7 @@ import numpy as np
 
 from .geometry import as_ring, distance_to_segments, points_in_rings
 
-__all__ = ["SizeField", "PolygonDensity", "PointDensity", "LineDensity"]
+__all__ = ["SizeField", "PolygonDensity", "PointDensity", "LineDensity", "GridDensity"]
 
 
 @dataclass
@@ -45,12 +45,46 @@ class LineDensity:
 
 
 @dataclass
+class GridDensity:
+    """Sizes given on a regular grid (nodes at x0 + i dx, y0 + j dy), read bilinearly; no effect outside it.
+
+    The terrain-driven sizes (mesher.demsize) come as one of these; the grid already limits its own growth.
+    """
+
+    x0: float
+    y0: float
+    dx: float
+    dy: float
+    values: np.ndarray  # (ny, nx)
+
+    def __call__(self, px, py) -> np.ndarray:
+        v = np.asarray(self.values, dtype=np.float64)
+        ny, nx = v.shape
+        fx = (np.asarray(px, dtype=np.float64) - self.x0) / self.dx
+        fy = (np.asarray(py, dtype=np.float64) - self.y0) / self.dy
+        inside = (fx >= 0) & (fx <= nx - 1) & (fy >= 0) & (fy <= ny - 1)
+        i = np.clip(np.floor(fx).astype(np.int64), 0, max(nx - 2, 0))
+        j = np.clip(np.floor(fy).astype(np.int64), 0, max(ny - 2, 0))
+        tx = np.clip(fx - i, 0.0, 1.0)
+        ty = np.clip(fy - j, 0.0, 1.0)
+        i1 = np.minimum(i + 1, nx - 1)
+        j1 = np.minimum(j + 1, ny - 1)
+        out = (v[j, i] * (1 - tx) + v[j, i1] * tx) * (1 - ty) + (v[j1, i] * (1 - tx) + v[j1, i1] * tx) * ty
+        return np.where(inside, out, np.inf)
+
+    @property
+    def minimum(self) -> float:
+        return float(np.nanmin(self.values))
+
+
+@dataclass
 class SizeField:
     default: float
     growth: float = 1.2
     polygons: List[PolygonDensity] = field(default_factory=list)
     points: List[PointDensity] = field(default_factory=list)
     lines: List[LineDensity] = field(default_factory=list)
+    grids: List[GridDensity] = field(default_factory=list)
 
     def __post_init__(self):
         if self.default <= 0:
@@ -64,6 +98,7 @@ class SizeField:
         vals += [p.size for p in self.polygons if p.size > 0]
         vals += [float(np.min(p.size[p.size > 0])) for p in self.points if np.any(p.size > 0)]
         vals += [ln.size for ln in self.lines if ln.size > 0]
+        vals += [gd.minimum for gd in self.grids]
         return float(min(vals))
 
     def _reach(self, s: float) -> float:
@@ -114,4 +149,6 @@ class SizeField:
                 a, b = c, np.roll(c, -1, axis=0)
             d = distance_to_segments(px, py, a, b, cutoff=self._reach(ln.size))
             out = np.minimum(out, ln.size + g * d)
+        for gd in self.grids:
+            out = np.minimum(out, gd(px, py))
         return out

@@ -18,6 +18,28 @@ manager first. QGIS tells you when a new version is available (*Upgradeable* tab
 2. *Plugins → Manage and Install Plugins → Install from ZIP*, choose the file, *Install Plugin*.
 3. If an older version was installed, it is replaced. Restart QGIS so the panels and menus load cleanly.
 
+## Optional: Gmsh
+
+The Gmsh meshing methods need the **gmsh** Python package (GPL-2.0-or-later, like this plugin's licence) in
+QGIS's own Python. Everything else works without it, and the panel greys out the Gmsh methods until it is
+installed.
+
+- **Windows**: open the *OSGeo4W Shell* that comes with QGIS and run `python -m pip install gmsh`.
+- **macOS**: `/Applications/QGIS.app/Contents/MacOS/bin/python3 -m pip install gmsh` (the path of your QGIS
+  application).
+- **Linux**: `python3 -m pip install gmsh` with the Python QGIS uses; the wheel also needs the system library
+  libGLU (`libglu1-mesa` on Debian and Ubuntu).
+
+Restart QGIS afterwards. *Compare meshing methods* tells you whether Gmsh was found.
+
+## Optional: MMG
+
+*Optimise or adapt a mesh (MMG)* runs MMG's standalone program `mmg2d_O3` (LGPL); nothing is installed into
+QGIS's Python. Get it from [mmgtools.org](https://www.mmgtools.org) (Windows, macOS and Linux builds) or from
+conda-forge (`mmgsuite`), then give the path of `mmg2d_O3` the first time you run the tool; it is remembered.
+Putting it on the PATH, or in an `MMG2D` environment variable, works too. MMG's Python package (mmgpy) is not
+used: it needs a newer NumPy than some QGIS installations ship.
+
 ## What appears
 
 - A **TELEMAC Toolkit** toolbar: open result, Results panel, live cursor, probe, profile, Mesh workflow

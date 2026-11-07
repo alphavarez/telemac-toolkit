@@ -1,6 +1,8 @@
 # TELEMAC Toolkit for QGIS — User guide
 
-Version 0.4.0 · QGIS 3.44 LTR and QGIS 4.x · Windows, Linux, macOS
+**English** · [Español](../guia/README.md)
+
+Version 0.5.0 · QGIS 3.44 LTR and QGIS 4.x · Windows, Linux, macOS
 
 TELEMAC Toolkit builds meshes and analyses results for TELEMAC inside QGIS, with nothing but QGIS and
 Python. The mesher is made for TELEMAC first and writes the same mesh for other 2D programs (BASEMENT,
@@ -16,11 +18,12 @@ TUFLOW FV, Iber, Delft3D FM, MIKE 21 FM, ADCIRC/SCHISM, HEC-RAS).
 4. [Calculator, integrals and fluxes](04-calculator-integrals.md)
 5. [The mesh workflow](05-mesh-workflow.md): project, drawing, bottom, roughness, boundaries, meshing, quality
 6. [Channel and flume templates](06-channel-templates.md): straight, bend, meanders, bed formulas in s and n
-7. [Editing an existing mesh](07-edit-existing-mesh.md): bathymetry, dikes, dredging, friction
+7. [Editing an existing mesh](07-edit-existing-mesh.md): bathymetry, dikes, dredging, friction; editing nodes and elements, re-meshing an area
 8. [Formats, coordinates and boundary conditions](08-formats-coordinates-boundaries.md)
 9. [Processing tools reference](09-processing-reference.md) (every tool and parameter)
 10. [Scripting with Python](10-python.md)
 11. [Troubleshooting and FAQ](11-troubleshooting.md)
+12. [Boundary conditions and run files](12-run-files.md): rating curves, hydrographs, initial state, steering file, checks
 
 ## What is where
 
@@ -32,7 +35,11 @@ TUFLOW FV, Iber, Delft3D FM, MIKE 21 FM, ADCIRC/SCHISM, HEC-RAS).
 | Discharge through a section, volumes | *Plugins → TELEMAC Toolkit → Integrals and fluxes* |
 | Build a mesh | Toolbar *Mesh workflow panel* |
 | Build a laboratory flume, a bend or meanders | Mesh workflow panel, step 1 → *Channel or flume template* |
+| Build a natural river from a centreline, bank lines or a DEM | Mesh workflow panel, step 1 → *River reach…* |
 | Change the bottom (or friction) of an existing mesh | *Plugins → TELEMAC Toolkit → Mesh → Edit node values of a mesh* |
+| Refine where the terrain bends; breaklines from a DEM; adapt a mesh with MMG | Mesh workflow panel, step 1 *Terrain tolerance*, step 2 *Breaklines from the DEM…*, step 5 *Optimise or adapt (MMG)…* |
+| Compare meshing methods (and Blue Kenue meshes) | Mesh workflow panel, step 4 → *Compare methods…* |
+| Move, add or delete nodes; re-mesh an area | Mesh workflow panel, step 5 → *Edit in QGIS*, *Re-mesh inside polygons…* |
 | Convert a mesh to another program | *Mesh → Export or convert mesh* |
 | Run anything in batch or in a model | Processing toolbox → **TELEMAC Toolkit** |
 

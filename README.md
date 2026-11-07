@@ -9,7 +9,7 @@ Release 0.4.0: results viewer with arrow controls, a calculator with spatial der
 statistics, discharges and volumes; mesher with a step-by-step workflow, straight, curved and meandering
 channel templates, local coordinates, node editing of existing meshes and export to eight formats.
 
-**[User guide](docs/guide/README.md)**: installation, results, calculator, mesh workflow, channel templates,
+**[User guide](docs/guide/README.md)** (English) · **[Guía de usuario](docs/guia/README.md)** (español): installation, results, calculator, mesh workflow, channel templates,
 editing meshes, formats, every Processing tool, Python scripting and troubleshooting.
 
 ## Build a mesh
@@ -33,6 +33,13 @@ trapezoidal section), so no DEM is needed. Three planforms:
   straight outlet: the classic curved-flume experiments.
 - **Meanders**: a sine-generated curve (Langbein & Leopold), the shape of natural meanders, with its
   wavelength along the axis, largest deflection angle and number of wavelengths.
+- **Composed from segments**: any flume written as a short text — straights, bends, sharp elbows,
+  sine-generated and Kinoshita meanders, tapers, sudden expansions, slopes and steps in the bed.
+- **Drawn or imported**: a centreline drawn in QGIS, or a TXT, CSV or DXF file read as a centreline (with
+  widths) or as an outline (a basin with islands and walls).
+
+Every planform takes a rectangular, trapezoidal, compound, V-shaped, parabolic, asymmetric or custom
+cross-section.
 
 The template is for flumes and their numerical replicas, checks against analytical solutions (normal depth,
 backwater, bend superelevation), sensitivity tests (mesh size, friction, turbulence) and idealised reaches
@@ -60,15 +67,40 @@ them.
 | `roughness_zones` | Material id per element and a friction value per node | `name`, `material`, `friction` |
 | `boundaries` | Boundary conditions | `name`, `type` (wall, Q, H, QH, UV, UVH, free, waves or a code like 455), `value` |
 
-*Check the drawing* reports what the mesher will see (islands, structured parts, lines) before meshing.
+*Check the drawing* reports what the mesher will see (islands, structured parts, lines) before meshing, and
+measures the geometry against the element size: near-duplicate vertices, spikes, close corners, narrow gaps
+and line ends just off the outline, shown as points on the map, with a one-click fix for the safe ones.
 
 **3 · Bottom and roughness.** Rasters in priority order (the first one that covers a node wins), survey
 points (linear on their triangulation), then a formula of x and y such as `0.3 - 0.002*x` (or of `s` and
 `n` along a channel axis); nodes nothing covers take the nearest value. Roughness zones give TELEMAC a `BOTTOM FRICTION` variable, which
 TELEMAC-2D reads from the geometry file, and other programs a material id per element.
 
+**Natural rivers.** *River reach…* (step 1) turns a centreline with a
+constant width, a centreline and a DEM (each bank where the terrain rises a bankfull depth above the bed),
+or two bank lines into a structured channel with cross-sections normal to the flow, a domain with its
+floodplain, and inflow and outflow lines. With a DEM the river is also turned to run downstream. Several
+centrelines that join make a river network: one strip per reach, stopped short of each confluence, whose
+channel area is meshed with triangles along its banks. The nodes across follow the width, and only the
+cross-sections in tight bends are turned.
+
+**Comparing methods** (step 4 → *Compare methods…*): the project meshed with several methods, plus meshes
+made elsewhere (Blue Kenue `.t3s`, Salomé), measured on equal terms — element shape, size changes, outline,
+bed error against a DEM, water volume, time step, nodes and time. Blue Kenue `.i2s`/`.i3s` line sets can be
+imported straight into a mesh project.
+
+**Terrain-driven meshing**: element sizes from a DEM and a bed tolerance (small on banks, levees and
+embankments, the default size on flat ground), crest and toe breaklines from a DEM, and optimisation or
+adaptation of a mesh with MMG — to the terrain, or to a TELEMAC result for a second run.
+
+**Editing a generated mesh** (step 5): edit nodes and elements with QGIS's Mesh Digitizing tools and
+rebuild the mesh with its variables and `.cli`; re-mesh inside polygons, joined node for node to the rest;
+the boundary conditions of an existing mesh as editable lines. *Snapping for this project* (step 2) sets
+QGIS snapping for the drawing layers.
+
 **4 · Mesh and export.** Default size (left on *auto*, about 1/40 of the square root of the domain area),
-growth rate, smoothing; the output format; whether structured cells stay quadrilaterals; and the
+growth rate, smoothing, method (*Balanced*, *Quality-guaranteed* up to a smallest angle of 30°, or with the
+optional gmsh package Gmsh Delaunay, Frontal-Delaunay, MeshAdapt and quadrilaterals); the output format; whether structured cells stay quadrilaterals; and the
 coordinates of the file.
 
 ![Structured channel strip inside the unstructured floodplain mesh](docs/img/mesher_mesh.png)
@@ -285,7 +317,8 @@ tests/core                library tests (pytest, plain Python)
 tests/qgis                integration tests in a real headless QGIS
 tests/data                sample files and run summaries (see tests/data/README.md)
 scripts/                  demo cases, screenshots, packaging, Processing reference generator
-docs/guide/               user guide (Markdown, shown by GitHub)
+docs/guide/               user guide in English (Markdown, shown by GitHub)
+docs/guia/                guía de usuario en español
 ```
 
 Tests:
@@ -300,10 +333,12 @@ QT_QPA_PLATFORM=offscreen <qgis-python> -m pytest tests/qgis  # QGIS 3.44 and 4.
 | Phase | Content |
 | --- | --- |
 | 1. Results (0.1.0) | SELAFIN library, results as mesh layers, time controls, cursor, probes, profiles |
-| 2. Mesh (0.2.0 to 0.4.0) | Generator with structured parts, workflow panel, local coordinates, straight, bend and meander templates, node editing, boundary conditions, eight output formats, quality, cut |
-| 3. Analyse (0.4.0 started) | Calculator with spatial and time operators, discharges and volumes (done); arrival time, duration, hazard, scenario differences, listing parser (next) |
-| 2.x Mesh, next | Boundary editor on the mesh, steering file template, local remeshing of an existing mesh, branched channels, import of `.i2s`/`.i3s`/`.t3s` line files |
-| 4. Extend | 3D tools, partitioned results, streamlines, HEC-RAS geometry file writer |
+| 2. Mesh (0.2.0 to 0.5.0) | Generator with structured parts, workflow panel, local coordinates, straight, bend and meander templates, node editing, boundary conditions, eight output formats, quality, cut, node-count check; river helper and networks, boundary-condition automation, mesh editing, Gmsh methods and comparison, terrain-driven sizes, DEM breaklines, MMG |
+| 3. Analyse (0.4.0 started) | Calculator with spatial and time operators, discharges and volumes |
+
+Steps 1 to 6 of the roadmap are done (0.5.0): river helper and speed, boundary-condition
+automation, editing and snapping, meshing methods and their comparison, terrain-driven meshing and MMG,
+river networks and variable-width channels. The full plan is in [ROADMAP.md](ROADMAP.md).
 
 ## Credits
 

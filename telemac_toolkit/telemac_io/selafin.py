@@ -44,10 +44,15 @@ __all__ = [
     "SelafinWriter",
     "write_selafin",
     "FLOAT32_SAFE_LIMIT",
+    "FLOAT32_EXACT_LIMIT",
 ]
 
-#: Above this absolute coordinate, float32 resolution is worse than ~6 cm.
-FLOAT32_SAFE_LIMIT = 500_000.0
+#: Above this absolute coordinate, float32 resolution is worse than ~1.6 cm: files read are flagged.
+FLOAT32_SAFE_LIMIT = 131_072.0
+#: Above this absolute coordinate the writer stores an integer origin in IPARAM(3, 4) and coordinates relative
+#: to it, so float32 keeps a resolution better than 0.5 mm (map coordinates of 125 000 m alone would round
+#: to 8 mm, and nodes would sit up to that far from the drawing).
+FLOAT32_EXACT_LIMIT = 4_096.0
 
 _SINGLE_TAGS = ("SERAFIN ", "SERAFINS", "SELAFIN ", "SERAPHIN", "SERAFIN")
 _DOUBLE_TAGS = ("SERAFIND", "SELAFIND", "       D")
@@ -623,7 +628,7 @@ class SelafinWriter:
         if nplan:
             ip[6] = int(nplan)
         if isinstance(origin, str) and origin == "auto":
-            if not double and npoin and max(np.abs(x).max(), np.abs(y).max()) > FLOAT32_SAFE_LIMIT:
+            if not double and npoin and max(np.abs(x).max(), np.abs(y).max()) > FLOAT32_EXACT_LIMIT:
                 ox, oy = math.floor(x.min()), math.floor(y.min())
             else:
                 ox, oy = int(ip[2]), int(ip[3])
@@ -651,7 +656,12 @@ class SelafinWriter:
         if ipobo.size != npoin:
             raise ValueError("ipobo must have npoin values")
 
-        self._f = open(self.path, "wb")
+        try:
+            self._f = open(self.path, "wb")
+        except OSError as exc:
+            raise OSError(exc.errno, "%s cannot be written (%s): if it is loaded in QGIS or open in another program, "
+                                     "remove that layer or close it first, or write another file"
+                          % (self.path, exc.strerror or exc)) from exc
         try:
             tag = "SERAFIND" if double else "SERAFIN "
             self._rec(title[:72].ljust(72).encode("latin-1", "replace") + tag.encode("ascii"))

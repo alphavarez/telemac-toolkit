@@ -17,7 +17,8 @@ from ..telemac_io.cli import BoundaryTable, liquid_boundaries
 from ..telemac_io.mesh import boundary_loops
 from .geometry import distance_to_segments
 
-__all__ = ["BOUNDARY_CODES", "BoundaryLine", "build_boundary_table", "liq_template", "parse_type"]
+__all__ = ["BOUNDARY_CODES", "TRACER_CODES", "BoundaryLine", "build_boundary_table", "liq_template", "parse_type",
+           "parse_tracer", "default_tracer"]
 
 #: Boundary types -> TELEMAC LIHBOR, LIUBOR, LIVBOR
 BOUNDARY_CODES = {
@@ -38,6 +39,39 @@ ALIASES = {
 }
 
 
+#: tracer boundary types (LITBOR), as Blue Kenue lists them
+TRACER_CODES = {"wall": 2, "prescribed": 5, "free": 4}
+_TRACER_ALIASES = {"closed": "wall", "solid": "wall", "2": "wall", "imposed": "prescribed", "5": "prescribed", "4": "free"}
+
+
+def default_tracer(codes) -> int:
+    """LITBOR for a boundary type: walls 2; inflows (prescribed discharge or velocities) 5; the others 4 (free)."""
+    h, u, v = (int(c) for c in tuple(codes)[:3])
+    if (h, u, v) == (2, 2, 2):
+        return 2
+    return 5 if u in (5, 6) else 4
+
+
+def parse_tracer(text) -> Optional[int]:
+    """LITBOR from 'wall', 'prescribed', 'free' (or 2, 5, 4); None when empty (then it follows the type)."""
+    t = str(text if text is not None else "").strip().lower()
+    if not t or t in ("null", "none", "auto", "automatic"):
+        return None
+    t = _TRACER_ALIASES.get(t, t)
+    if t in TRACER_CODES:
+        return TRACER_CODES[t]
+    raise ValueError("unknown tracer type %r (use wall, prescribed or free)" % text)
+
+
+def parse_codes(text) -> Tuple[Tuple[int, int, int], Optional[int]]:
+    """Custom codes 'LIHBOR LIUBOR LIVBOR [LITBOR]', e.g. '5 4 4' or '5 4 4 4'."""
+    digits = [c for c in str(text or "") if c.isdigit()]
+    if len(digits) not in (3, 4):
+        raise ValueError("custom codes %r: give LIHBOR LIUBOR LIVBOR and optionally LITBOR, e.g. 5 4 4 4" % text)
+    codes = tuple(int(c) for c in digits[:3])
+    return codes, (int(digits[3]) if len(digits) == 4 else None)
+
+
 def parse_type(text) -> Tuple[int, int, int]:
     t = str(text or "").strip().lower().replace(" ", "").replace("_", "")
     t = ALIASES.get(t, t)
@@ -54,6 +88,7 @@ class BoundaryLine:
     coords: np.ndarray
     codes: Tuple[int, int, int]
     name: str = ""
+    tracer: Optional[int] = None  # LITBOR; None follows the type (default_tracer)
 
 
 def boundary_order(x, y, ikle) -> np.ndarray:
@@ -96,9 +131,18 @@ def build_boundary_table(x, y, ikle, lines: Sequence[BoundaryLine], tolerance: O
         return table, ["The mesh has no boundary."]
     bx, by = x[order], y[order]
     if tolerance is None:
-        # half of the median boundary edge length
-        e = np.hypot(np.diff(np.r_[bx, bx[:1]]), np.diff(np.r_[by, by[:1]]))
-        tolerance = 0.5 * float(np.median(e))
+        # each node: half of its shorter boundary edge, so lines end cleanly on graded meshes
+        # (fine edges across a river, coarse ones on the floodplain)
+        tol = np.empty(len(order))
+        for a, b in table.loops:
+            lx, ly = bx[a:b], by[a:b]
+            nxt = np.hypot(np.roll(lx, -1) - lx, np.roll(ly, -1) - ly)
+            prv = np.roll(nxt, 1)
+            tol[a:b] = 0.5 * np.minimum(nxt, prv)
+        tolerance = tol
+        tol_text = "half the boundary edge at each node"
+    else:
+        tol_text = "%.3g" % tolerance
     r = table.records
     assigned = np.zeros(len(order), dtype=bool)
     for ln in lines:
@@ -108,9 +152,10 @@ def build_boundary_table(x, y, ikle, lines: Sequence[BoundaryLine], tolerance: O
         d = distance_to_segments(bx, by, c[:-1], c[1:])
         hit = d <= tolerance
         if not hit.any():
-            report.append("Line %r touches no boundary node (tolerance %.3g); check that it follows the mesh boundary." % (ln.name, tolerance))
+            report.append("Line %r touches no boundary node (tolerance %s); check that it follows the mesh boundary." % (ln.name, tol_text))
             continue
         r["lihbor"][hit], r["liubor"][hit], r["livbor"][hit] = ln.codes
+        r["litbor"][hit] = ln.tracer if ln.tracer is not None else default_tracer(ln.codes)
         for k in np.flatnonzero(hit):
             table.comments[k] = ln.name
         assigned |= hit
@@ -123,8 +168,11 @@ def build_boundary_table(x, y, ikle, lines: Sequence[BoundaryLine], tolerance: O
     if len(lb) > 1:
         report.append("Liquid boundaries are numbered as TELEMAC numbers them: from the boundary point with the "
                       "smallest x + y, counter-clockwise.")
-        if n < 5:
-            report.append("  Warning: liquid boundary %d has only %d nodes; 5 or more are recommended." % (b["number"], n))
+    for b in lb:
+        if len(b["nodes"]) < 5:
+            report.append("  Warning: liquid boundary %d has only %d nodes; 5 or more are recommended (a discharge "
+                          "through a few nodes enters as a jet, which can turn supercritical and dry the boundary: "
+                          "TELEMAC then stops with DEBIMP)." % (b["number"], len(b["nodes"])))
     if not lb:
         report.append("No liquid boundary: every boundary node is a wall.")
     return table, report

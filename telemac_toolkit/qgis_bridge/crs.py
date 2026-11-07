@@ -44,8 +44,30 @@ LOCAL_CRS_WKT = (
 LOCAL_LIMIT = 100_000.0
 
 
+LOCAL_CRS_NAME = "Local metric grid (laboratory)"
+
+
 def local_crs() -> QgsCoordinateReferenceSystem:
-    return QgsCoordinateReferenceSystem.fromWkt(LOCAL_CRS_WKT)
+    """The local laboratory CRS, registered once as a QGIS user CRS so QGIS shows its name and a code (USER:...)
+    instead of "Unknown CRS" and an empty [ ]."""
+    crs = QgsCoordinateReferenceSystem.fromWkt(LOCAL_CRS_WKT)
+    if crs.authid():
+        return crs  # registered already: QGIS recognises the definition
+    try:
+        from qgis.core import Qgis, QgsApplication
+
+        reg = QgsApplication.coordinateReferenceSystemRegistry()
+        for d in reg.userCrsList():
+            if d.name == LOCAL_CRS_NAME:
+                c = QgsCoordinateReferenceSystem("USER:%d" % d.id)
+                if c.isValid():
+                    return c
+        uid = reg.addUserCrs(crs, LOCAL_CRS_NAME, Qgis.CrsDefinitionFormat.Wkt)
+        if uid and uid > 0:
+            return QgsCoordinateReferenceSystem("USER:%d" % uid)
+    except Exception:  # noqa: BLE001 - an unregistered CRS works too, only without a name in QGIS
+        pass
+    return crs
 
 
 def is_local_crs(crs) -> bool:

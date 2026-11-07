@@ -143,7 +143,7 @@ def element_mask_in_rings(x, y, ikle, rings: Sequence[np.ndarray]) -> np.ndarray
     inside = np.zeros(cx.size, dtype=bool)
     for ring in rings:
         r = np.asarray(ring, dtype=np.float64)[:, :2]
-        if len(r) > 1 and np.allclose(r[0], r[-1]):
+        if len(r) > 1 and np.all(np.abs(r[0] - r[-1]) <= 1e-12 * max(1.0, float(np.abs(r).max()))):
             r = r[:-1]
         if len(r) < 3:
             continue

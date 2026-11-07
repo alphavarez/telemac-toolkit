@@ -23,6 +23,7 @@ from qgis.core import (  # noqa: E402
     QgsMesh,
     QgsMeshLayer,
     QgsPointXY,
+    QgsProcessingFeedback,
     QgsProject,
     QgsRasterLayer,
     QgsVectorFileWriter,
@@ -293,6 +294,46 @@ def test_flume_template_in_local_coordinates(qgis, tmp_path):
     assert "0.02" in liq and "0.35" in liq
 
 
+def test_mesh_follows_a_hand_drawn_outline(qgis, tmp_path):
+    """A domain drawn with gentle bends: the boundary stays within the set distance of the drawing."""
+    import processing
+    from telemac_toolkit.mesher.metrics import mesh_metrics
+    from telemac_toolkit.qgis_bridge import meshing as M
+    from telemac_toolkit.telemac_io import SelafinFile
+
+    rng = np.random.default_rng(1)
+    sides = []
+    for a, b in (((0, 0), (1000, 0)), ((1000, 0), (1000, 600)), ((1000, 600), (0, 600)), ((0, 600), (0, 0))):
+        a, b = np.asarray(a, float), np.asarray(b, float)
+        L = float(np.hypot(*(b - a)))
+        t = np.linspace(0, 1, int(L / 25.0) + 1)[:-1]  # a vertex every 25 m, gentle bends and some jitter
+        off = 8.0 * np.sin(2 * np.pi * t * L / 400.0) * np.sin(np.pi * t) + rng.normal(0, 2.4, len(t))
+        off[0] = 0.0
+        sides.append(a + t[:, None] * (b - a) + off[:, None] * np.array([-(b - a)[1], (b - a)[0]]) / L)
+    ring = np.vstack(sides)
+    path = str(tmp_path / "wiggly.gpkg")
+    lay = M.create_mesh_project(path, QgsCoordinateReferenceSystem(CRS), settings={"default_size": "20"})
+    _add(lay["domain"], QgsGeometry.fromPolygonXY([_pts([tuple(p) for p in ring] + [tuple(ring[0])])]), name="valley")
+    outline = M.domain_rings(lay, QgsCoordinateReferenceSystem(CRS))
+    devs = {}
+    for tol in (0.0, 0.2):
+        out = str(tmp_path / ("w%g.slf" % tol))
+        log = []
+
+        class Feedback(QgsProcessingFeedback):
+            def pushInfo(self, info):
+                log.append(info)
+
+        r = processing.run("telemactoolkit:generatemesh", {"PROJECT": path, "OUTPUT": out, "OUTLINE_TOLERANCE": tol,
+                                                           "LOAD": False}, feedback=Feedback())
+        assert any(line.startswith("Largest distance between the drawn lines and the mesh edges") for line in log)
+        with SelafinFile(r["OUTPUT"]) as f:
+            h = f.header
+            devs[tol] = mesh_metrics(h.x, h.y, h.ikle, outline=outline)["outline_dev_max"]
+    assert devs[0.0] <= 0.05 * 20 + 1e-6  # auto: 5% of the element size
+    assert devs[0.2] <= 0.2 + 1e-6 and devs[0.2] < 0.5 * devs[0.0]
+
+
 def test_export_cut_quality_algorithms(project):
     import processing
     from telemac_toolkit.telemac_io import SelafinFile
@@ -375,15 +416,38 @@ def test_workflow_panel(project):
     panel.set_project(path)
     assert panel.table.rowCount() == len(M.LAYER_KEYS)
     assert panel.size.value() == 30.0
+    # the object counts follow the drawing, before and after saving
+    import time
+    from qgis.PyQt.QtCore import QCoreApplication, Qt
+
+    def count(key):
+        deadline = time.time() + 3.0
+        while time.time() < deadline:
+            QCoreApplication.processEvents()
+            time.sleep(0.02)
+        row = [r for r in range(panel.table.rowCount()) if panel.table.item(r, 0).data(Qt.ItemDataRole.UserRole) == key][0]
+        return int(panel.table.item(row, 1).text())
+
+    pts = panel.layers["fixed_points"]
+    n0 = count("fixed_points")
+    pts.startEditing()
+    f = QgsFeature(pts.fields())
+    f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(X0 + 10, Y0 + 10)))
+    pts.addFeature(f)
+    assert count("fixed_points") == n0 + 1
+    pts.rollBack()
+    assert count("fixed_points") == n0
     panel.formula.setText("2.0")
     panel.fmt.setCurrentIndex(list(M.FORMATS).index("telemac"))
     panel.output.setFilePath(str(d / "panel.slf"))
+    panel.outline_tol.setValue(0.5)
     assert panel.check_drawing()
     res = panel.generate(wait=True)
     assert res is not None and os.path.exists(str(d / "panel.slf")) and os.path.exists(str(d / "panel.cli"))
     assert "Done" in panel.log.toPlainText()
     st = M.read_settings(path)
     assert st["bottom_formula"] == "2.0" and st["mesh_file"].endswith("panel.slf")
+    assert st["outline_tolerance"] == "0.5"
     pt = panel.find(False, 1)
     assert pt is not None and "Node 1" in panel.found.text()
     assert panel.find(True, 10 ** 8) is None

@@ -157,3 +157,111 @@ def test_snap_rings_to_submesh_nodes():
     assert [10.0, 5.0] in snapped.tolist()
     assert [10.0, 5.2] not in snapped.tolist()
     assert len(snapped) == 5
+
+
+def test_impossible_mesh_is_refused_at_once():
+    """A 130 km domain with 0.05 m refinement would ask for billions of nodes: say so, do not hang."""
+    import numpy as np
+    import pytest
+    from telemac_toolkit.mesher.backends import triangulate_scipy
+    from telemac_toolkit.mesher.engine import MeshInput, estimate_node_count, generate
+    from telemac_toolkit.mesher.sizefield import PointDensity, PolygonDensity, SizeField
+
+    poly = np.array([[0, 3], [60, 0], [130, 20], [120, 120], [40, 100], [0, 40.0]]) * 1000.0
+    rect = np.array([[80, 40], [100, 40], [100, 60], [80, 60.0]]) * 1000.0
+    size = SizeField(2500.0, 1.2, [PolygonDensity([rect], 0.2)], [PointDensity(np.array([[20e3, 60e3]]), np.array([0.05]))])
+    inp = MeshInput([[poly]], size)
+    with pytest.raises(ValueError, match="more than the limit"):
+        generate(inp, triangulate_scipy)
+
+    # a sane case: the estimate is within 25 % of the real node count
+    small = poly / 1000.0
+    ok = SizeField(2.5, 1.2, [PolygonDensity([rect / 1000.0], 0.2)], [PointDensity(np.array([[20.0, 60.0]]), np.array([0.05]))])
+    inp = MeshInput([[small]], ok)
+    res = generate(inp, triangulate_scipy)
+    bb = (small[:, 0].min(), small[:, 1].min(), small[:, 0].max(), small[:, 1].max())
+    est = estimate_node_count(inp, [small], bb)
+    assert 0.75 * len(res.x) < est < 1.25 * len(res.x)
+
+
+def test_quality_method_reaches_the_target_angle():
+    import math
+    from dataclasses import replace
+
+    import numpy as np
+    from telemac_toolkit.mesher.backends import triangulate_scipy
+    from telemac_toolkit.mesher.engine import MeshInput, generate, min_angles
+    from telemac_toolkit.mesher.sizefield import PointDensity, PolygonDensity, SizeField
+
+    poly = np.array([[0, 3], [60, 0], [130, 20], [120, 120], [40, 100], [0, 40.0]])
+    rect = np.array([[80, 40], [100, 40], [100, 60], [80, 60.0]])
+    inp = MeshInput([[poly]], SizeField(2.5, 1.2, [PolygonDensity([rect], 0.5)], [PointDensity(np.array([[20, 60.0]]), np.array([0.2]))]),
+                    hard_lines=[(np.array([[10, 20], [110, 90.0]]), False)])
+    base = generate(inp, triangulate_scipy)
+    q = generate(replace(inp, min_angle=30.0), triangulate_scipy)
+    a0 = min_angles(base.x, base.y, base.ikle)
+    a1 = min_angles(q.x, q.y, q.ikle)
+    assert a1.min() >= 30.0 - 1e-6 and a1.min() >= a0.min()
+    assert len(q.x) < 1.05 * len(base.x)  # a few nodes, not a different mesh
+    assert any("Quality refinement" in m for m in q.log)
+
+    # a 15 degree corner cannot be meshed above 15 degrees: refinement stops, and does not make it worse
+    a = math.radians(15)
+    wedge = np.array([[0, 0], [100, 0], [100 * math.cos(a), 100 * math.sin(a)], [0, 0.0]])
+    w = generate(MeshInput([[wedge]], SizeField(3.0, 1.2), min_angle=30.0), triangulate_scipy)
+    assert min_angles(w.x, w.y, w.ikle).min() > 13.0
+
+
+def _wiggly_ring(step, amp, noise, seed, wave=400.0):
+    """A 1000 m x 600 m box drawn by hand: vertices every ``step`` m, gentle bends and some jitter."""
+    rng = np.random.default_rng(seed)
+    out = []
+    for a, b in (((0, 0), (1000, 0)), ((1000, 0), (1000, 600)), ((1000, 600), (0, 600)), ((0, 600), (0, 0))):
+        a, b = np.asarray(a, float), np.asarray(b, float)
+        L = float(np.hypot(*(b - a)))
+        t = np.linspace(0, 1, int(L / step) + 1)[:-1]
+        nrm = np.array([-(b - a)[1], (b - a)[0]]) / L
+        off = amp * np.sin(2 * np.pi * t * L / wave) * np.sin(np.pi * t) + rng.normal(0, noise, len(t))
+        off[0] = 0.0
+        out.append(a + t[:, None] * (b - a) + off[:, None] * nrm)
+    return np.vstack(out)
+
+
+def _ring_area(r):
+    return 0.5 * abs(float(np.dot(r[:, 0], np.roll(r[:, 1], -1)) - np.dot(r[:, 1], np.roll(r[:, 0], -1))))
+
+
+def test_mesh_boundary_follows_the_drawn_outline():
+    from telemac_toolkit.mesher.metrics import mesh_metrics
+
+    ring = _wiggly_ring(25.0, 8.0, 2.4, 1)
+    h = 20.0
+
+    def dev(**kw):
+        res = generate(MeshInput(domain=[[ring]], size=SizeField(h, 1.2), **kw), triangulate_scipy)
+        assert res.stats["angle_min"] > 20.0
+        return mesh_metrics(res.x, res.y, res.ikle, outline=[ring])["outline_dev_max"], res
+
+    # dropping every vertex that turns less than 30 degrees cuts across gentle bends (the old behaviour)
+    loose, _ = dev(outline_fraction=0.0)
+    assert loose > 0.08 * h
+    # by default the boundary stays within 5% of the element size of the drawing
+    auto, res = dev()
+    assert auto <= 0.05 * h + 1e-9
+    assert any("Drawn vertices kept" in line for line in res.log)
+    # or within a distance in metres; here every drawn vertex stays a node
+    tight, res = dev(outline_tolerance=0.01)
+    assert tight <= 0.01 + 1e-9
+    assert abs(res.stats["area_total"] - _ring_area(ring)) < 1e-6 * _ring_area(ring)
+
+
+def test_digitizing_zigzags_neither_explode_nor_make_slivers():
+    # a vertex every 2 m, jittering by 0.3 m: many vertices turn more than 30 degrees, but the line does not
+    # turn at the scale of 20 m elements. It used to keep them all, merge some of their nodes across the line
+    # and split the missing constraint segments without end.
+    ring = _wiggly_ring(2.0, 10.0, 0.3, 2, wave=300.0)
+    res = generate(MeshInput(domain=[[ring]], size=SizeField(20.0, 1.2)), triangulate_scipy)
+    assert len(res.x) < 1.15 * 1000 * 600 / (20.0 ** 2 * 0.866) + 200
+    assert res.stats["angle_min"] > 8.0
+    assert not any("Overlapping nodes merged" in line for line in res.log)
+    assert any("smaller than half an element" in line for line in res.log)
